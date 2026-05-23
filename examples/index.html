@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plexis Examples</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: #f8fafc;
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-bottom: 2rem;
+    }
+
+    .controls {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 0.5rem 1.1rem;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      background: #1e293b;
+      color: #cbd5e1;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+
+    button:hover {
+      background: #334155;
+      border-color: #475569;
+      color: #f1f5f9;
+    }
+
+    button.active {
+      background: #1d4ed8;
+      border-color: #2563eb;
+      color: #fff;
+    }
+
+    .output-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+    }
+
+    .output-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #475569;
+    }
+
+    .status {
+      font-size: 0.75rem;
+      color: #475569;
+    }
+
+    #output {
+      font-family: 'Menlo', 'Monaco', 'Cascadia Code', 'Courier New', monospace;
+      font-size: 0.82rem;
+      line-height: 1.65;
+      background: #0a0d14;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      min-height: 200px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #94a3b8;
+      overflow-y: auto;
+    }
+
+    #output:empty::before {
+      content: 'Select an example above to run it.';
+      color: #334155;
+    }
+
+    .running { color: #38bdf8; }
+    .done    { color: #475569; }
+  </style>
+</head>
+<body>
+  <h1>Plexis Examples</h1>
+  <p class="subtitle">Select an example to run it in the browser.</p>
+
+  <div class="controls">
+    <button id="btn-payment" onclick="run('payment-pipeline', this)">Payment Pipeline</button>
+    <button id="btn-order"   onclick="run('order-domain', this)">Order Domain</button>
+    <button id="btn-graph"   onclick="run('graph-inspection', this)">Graph Inspection</button>
+  </div>
+
+  <div class="output-header">
+    <span class="output-label">Output</span>
+    <span class="status" id="status"></span>
+  </div>
+  <pre id="output"></pre>
+
+  <script type="module">
+    const output = document.getElementById('output');
+    const status = document.getElementById('status');
+
+    // ── Console capture shim ────────────────────────────────────────────────
+    const _log   = console.log.bind(console);
+    const _error = console.error.bind(console);
+    const _warn  = console.warn.bind(console);
+
+    function fmt(args) {
+      return args.map(a =>
+        a !== null && typeof a === 'object'
+          ? JSON.stringify(a, null, 2)
+          : String(a)
+      ).join(' ');
+    }
+
+    function appendLine(text, cls) {
+      const span = document.createElement('span');
+      if (cls) span.className = cls;
+      span.textContent = text + '\n';
+      output.appendChild(span);
+    }
+
+    console.log   = (...args) => { _log(...args);   appendLine(fmt(args)); };
+    console.error = (...args) => { _error(...args); appendLine('ERROR: ' + fmt(args)); };
+    console.warn  = (...args) => { _warn(...args);  appendLine('WARN: '  + fmt(args)); };
+
+    // ── Runner ──────────────────────────────────────────────────────────────
+    let activeBtn = null;
+
+    window.run = async (name, btn) => {
+      output.textContent = '';
+      if (activeBtn) activeBtn.classList.remove('active');
+      activeBtn = btn;
+      btn.classList.add('active');
+      status.textContent = 'running…';
+      status.className = 'status running';
+
+      try {
+        // Cache-buster forces re-execution on every click.
+        // /* @vite-ignore */ suppresses Vite's static-analysis warning for
+        // fully-dynamic import paths; the dev server resolves them at runtime.
+        await import(/* @vite-ignore */ `./${name}.ts?t=${Date.now()}`);
+        // Give async main() a moment to finish printing
+        await new Promise(r => setTimeout(r, 50));
+      } catch (err) {
+        appendLine('Uncaught: ' + (err instanceof Error ? err.message : String(err)));
+      }
+
+      status.textContent = 'done';
+      status.className = 'status done';
+    };
+  </script>
+</body>
+</html>

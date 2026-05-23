@@ -1,0 +1,55 @@
+{
+  "name": "plexis",
+  "version": "1.0.0",
+  "description": "Zero-dependency TypeScript library for domain state machines and finite workflow pipelines",
+  "license": "MIT",
+  "author": "Claudio Nunez Jr",
+  "type": "module",
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.cjs",
+      "types": "./dist/types/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=19.0.0"
+  },
+  "keywords": [
+    "state-machine",
+    "pipeline",
+    "workflow",
+    "typescript",
+    "zero-dependency"
+  ],
+  "scripts": {
+    "build": "rolldown -c && tsc -p tsconfig.types.json",
+    "build:esm": "FORMAT=esm rolldown -c",
+    "build:cjs": "FORMAT=cjs rolldown -c",
+    "build:types": "tsc -p tsconfig.types.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "example:payment": "tsx examples/payment-pipeline.ts",
+    "example:order": "tsx examples/order-domain.ts",
+    "example:graph": "tsx examples/graph-inspection.ts",
+    "dev": "vite examples"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "@vitest/coverage-v8": "^4.1.7",
+    "rolldown": "^1.0.2",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3",
+    "vite": "^6.4.2",
+    "vitest": "^4.1.7"
+  }
+}
