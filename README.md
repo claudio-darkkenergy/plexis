@@ -1,5 +1,6 @@
 # Plexis
 
+[![CI](https://github.com/claudio-darkkenergy/plexis/actions/workflows/ci.yml/badge.svg)](https://github.com/claudio-darkkenergy/plexis/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/plexis)](https://www.npmjs.com/package/plexis)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](https://www.typescriptlang.org/)
