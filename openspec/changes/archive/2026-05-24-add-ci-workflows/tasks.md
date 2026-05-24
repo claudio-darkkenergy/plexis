@@ -27,6 +27,6 @@
 
 ## 4. Post-merge verification
 
-- [ ] 4.1 After merging, confirm the workflow run appears in the GitHub Actions tab
-- [ ] 4.2 Confirm the run completes with status `success`
-- [ ] 4.3 Confirm the README badge renders as "passing" on the repo's main page
+- [x] 4.1 After merging, confirm the workflow run appears in the GitHub Actions tab
+- [x] 4.2 Confirm the run completes with status `success`
+- [x] 4.3 Confirm the README badge renders as "passing" on the repo's main page
