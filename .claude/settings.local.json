@@ -8,7 +8,12 @@
       "Bash(npm run *)",
       "Bash(node *)",
       "Bash(python3 *)",
-      "Bash(openspec new *)"
+      "Bash(openspec new *)",
+      "Bash(pnpm install *)",
+      "Bash(pnpm typecheck *)",
+      "Bash(pnpm build *)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm pack *)"
     ]
   }
 }
