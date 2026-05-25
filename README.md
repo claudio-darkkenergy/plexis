@@ -1,26 +1,24 @@
 # Plexis
 
-[![CI](https://github.com/claudio-darkkenergy/plexis/actions/workflows/ci.yml/badge.svg)](https://github.com/claudio-darkkenergy/plexis/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/plexis)](https://www.npmjs.com/package/plexis)
+[![Build](https://github.com/claudio-darkkenergy/plexis/actions/workflows/build.yml/badge.svg)](https://github.com/claudio-darkkenergy/plexis/actions/workflows/build.yml)
+[![npm](https://img.shields.io/npm/v/@tde.io/plexis)](https://www.npmjs.com/package/@tde.io/plexis)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](https://www.typescriptlang.org/)
 
 Zero-dependency TypeScript library for modeling business state with domain state machines and finite workflow pipelines.
 
-> **Pre-release** — API is stable; npm publication pending.
-
 ## Installation
 
 ```sh
-npm install plexis
-# pnpm add plexis
-# yarn add plexis
+npm install @tde.io/plexis
+# pnpm add @tde.io/plexis
+# yarn add @tde.io/plexis
 ```
 
 ## Quick Start
 
 ```typescript
-import { defineDomain, definePipeline, state, edge, node, fork, terminal } from 'plexis';
+import { defineDomain, definePipeline, state, edge, node, fork, terminal } from '@tde.io/plexis';
 
 type OrderContext = { cardValid: boolean };
 
@@ -70,6 +68,24 @@ The two layers compose naturally: an edge on a domain can invoke a pipeline, so 
 ## Zero Dependencies
 
 Plexis has no runtime dependencies. It runs in Node.js ≥ 19, modern browsers, and serverless environments without polyfills.
+
+## CI & Releasing
+
+Three GitHub Actions workflows form the delivery pipeline:
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| **Build** | push to `main`, tag `v*.*.*` | Typechecks, builds, uploads `dist/` as artifact `plexis-dist` |
+| **Test** | Build succeeds | Downloads `plexis-dist`, runs `pnpm test` against it |
+| **Publish** | tag `v*.*.*` | Waits for Build + Test to succeed, downloads `plexis-dist`, publishes to npm |
+
+**To release a new version:**
+
+1. Update `version` in `package.json` and merge to `main`.
+2. Push a tag matching the version: `git tag v1.2.3 && git push origin v1.2.3`.
+3. The Publish workflow verifies that the tag name matches `package.json` version, then publishes `@tde.io/plexis@1.2.3` to npm.
+
+**Required secret:** `NPM_TOKEN` — an npm automation token with publish rights on the `@tde.io` scope. Add it to the repository's Actions secrets before the first publish.
 
 ## License
 

@@ -1,9 +1,20 @@
 {
-  "name": "plexis",
+  "name": "@tde.io/plexis",
   "version": "1.0.0",
   "description": "Zero-dependency TypeScript library for domain state machines and finite workflow pipelines",
   "license": "MIT",
   "author": "Claudio Nunez Jr",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/claudio-darkkenergy/plexis.git"
+  },
+  "bugs": {
+    "url": "https://github.com/claudio-darkkenergy/plexis/issues"
+  },
+  "homepage": "https://github.com/claudio-darkkenergy/plexis#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/cjs/index.cjs",
   "module": "./dist/esm/index.js",

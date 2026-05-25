@@ -1,22 +1,25 @@
-name: CI
+name: Build
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
 
 jobs:
-  build-test:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
         with:
-          run_install: false
+          version: 11.3.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -28,5 +31,8 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Test
-        run: pnpm test
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plexis-dist
+          path: dist/
