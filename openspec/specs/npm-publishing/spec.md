@@ -115,19 +115,20 @@ The publish workflow SHALL refuse to publish unless both the build workflow and 
 - **THEN** the publish workflow does not run `pnpm publish`
 - **AND** the publish workflow is marked failed
 
-### Requirement: Authentication uses NPM_TOKEN repository secret
+### Requirement: Authentication uses OIDC with npm provenance
 
-The publish workflow SHALL authenticate to npm using a repository secret named `NPM_TOKEN`. The secret MUST hold an npm automation token with publish rights on the `@tde.io` scope. The token MUST NOT be echoed or otherwise leaked in workflow logs.
+The publish workflow SHALL authenticate to npm using GitHub-issued OIDC tokens and SHALL publish with npm provenance enabled. The workflow MUST grant `id-token: write` permission and MUST invoke publish with the `--provenance` flag (e.g., `pnpm publish --provenance`). The workflow MUST NOT depend on a long-lived npm credential stored in repository secrets.
 
-#### Scenario: Token is present
-- **WHEN** the publish workflow runs
-- **THEN** `secrets.NPM_TOKEN` is exported into the npm config (e.g., via `~/.npmrc`)
-- **AND** `pnpm publish` authenticates successfully
+#### Scenario: Workflow grants id-token write permission
+- **WHEN** a maintainer inspects the publish workflow
+- **THEN** the workflow declares `permissions: { id-token: write }` at the workflow or job scope
 
-#### Scenario: Token is missing
-- **WHEN** the publish workflow runs and `secrets.NPM_TOKEN` is not set
-- **THEN** the workflow fails before invoking `pnpm publish`
+#### Scenario: Publish runs with provenance
+- **WHEN** the publish workflow runs `pnpm publish`
+- **THEN** the command includes the `--provenance` flag
+- **AND** the published package on npm shows a provenance statement linked to the GitHub Actions run
 
-#### Scenario: Token does not appear in logs
-- **WHEN** the publish workflow completes (success or failure)
-- **THEN** the workflow log does not contain the literal token value
+#### Scenario: No long-lived npm token in secrets
+- **WHEN** a maintainer audits the publish workflow and repository secrets
+- **THEN** the workflow does not read any `NPM_TOKEN`, `NPM_AUTH_TOKEN`, or equivalent long-lived npm credential
+- **AND** no such secret is required to exist for a publish to succeed

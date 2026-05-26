@@ -2,7 +2,7 @@
   "name": "@tde.io/plexis",
   "version": "1.0.1",
   "description": "Zero-dependency TypeScript library for domain state machines and finite workflow pipelines",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Claudio Nunez Jr",
   "repository": {
     "type": "git",
@@ -32,7 +32,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=19.0.0"
+    "node": "24"
   },
   "keywords": [
     "state-machine",
@@ -52,7 +52,8 @@
     "example:payment": "tsx examples/payment-pipeline.ts",
     "example:order": "tsx examples/order-domain.ts",
     "example:graph": "tsx examples/graph-inspection.ts",
-    "dev": "vite examples"
+    "dev": "vite examples",
+    "just-patch": "npm version patch --no-git-tag-version"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",
