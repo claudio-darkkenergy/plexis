@@ -14,9 +14,10 @@ This repository implements the **composable API** — the second-generation auth
 
 The project is in early implementation. So far:
 
-- `src/types.ts` — Complete TypeScript interface definitions for the entire composable API
-- `src/tsconfig*.json` — Build configurations for ESM, CJS, and types outputs
-- Root `package.json` — Minimal; build scripts and test infrastructure not yet configured
+- `packages/plexis/src/types.ts` — Complete TypeScript interface definitions for the entire composable API
+- `packages/plexis/tsconfig*.json` — Build configurations for ESM, CJS, and types outputs
+- Root `package.json` is a private workspace root with pass-through scripts (`build`, `test`, `typecheck`) that delegate to `@tde.io/plexis` via `pnpm --filter`
+- `packages/plexis/package.json` — Library manifest with `name`, `version`, `exports`, `scripts`, and `devDependencies`
 
 ## Composable Authoring API
 
