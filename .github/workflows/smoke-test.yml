@@ -1,0 +1,67 @@
+name: Smoke Test
+
+on:
+  workflow_run:
+    workflows: [Publish]
+    types: [completed]
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Smoke-test published package
+        run: |
+          VERSION=$(node -p "require('./packages/plexis/package.json').version")
+          echo "Testing @tde.io/plexis@${VERSION}"
+
+          # Wait for package to be indexed on npm (up to 5 min)
+          for i in $(seq 1 20); do
+            FOUND=$(npm view "@tde.io/plexis@${VERSION}" version --registry https://registry.npmjs.org 2>/dev/null || true)
+            if [ "$FOUND" = "$VERSION" ]; then
+              echo "Package available on npm"
+              break
+            fi
+            echo "  attempt $i/20 — retrying in 15s"
+            sleep 15
+          done
+          if [ "$FOUND" != "$VERSION" ]; then
+            echo "Timed out waiting for @tde.io/plexis@${VERSION} to appear on npm"
+            exit 1
+          fi
+
+          # Install in a clean temp directory
+          SMOKE_DIR=$(mktemp -d)
+          cd "$SMOKE_DIR"
+          npm init -y --quiet > /dev/null
+          npm install "@tde.io/plexis@${VERSION}" --registry https://registry.npmjs.org --save-exact --quiet
+
+          # ESM — named exports resolve and are callable
+          node --input-type=module -e "
+            import { defineDomain, definePipeline, state, edge, node, fork, terminal, createTracer, PlexisError } from '@tde.io/plexis';
+            const fns = { defineDomain, definePipeline, state, edge, node, fork, terminal, createTracer };
+            for (const [name, fn] of Object.entries(fns)) {
+              if (typeof fn !== 'function') throw new Error('ESM: ' + name + ' is not a function');
+            }
+            if (typeof PlexisError !== 'function') throw new Error('ESM: PlexisError is not a class');
+            console.log('ESM ok');
+          "
+
+          # CJS — same check via require()
+          node -e "
+            const pkg = require('@tde.io/plexis');
+            const fns = ['defineDomain', 'definePipeline', 'state', 'edge', 'node', 'fork', 'terminal', 'createTracer'];
+            for (const name of fns) {
+              if (typeof pkg[name] !== 'function') throw new Error('CJS: ' + name + ' is not a function');
+            }
+            if (typeof pkg.PlexisError !== 'function') throw new Error('CJS: PlexisError is not a class');
+            console.log('CJS ok');
+          "
+
+          cd - > /dev/null
+          rm -rf "$SMOKE_DIR"
+          echo "Smoke test passed for @tde.io/plexis@${VERSION}"
