@@ -4,7 +4,9 @@
   "scripts": {
     "build": "pnpm --filter @tde.io/plexis run build",
     "test": "pnpm --filter @tde.io/plexis run test",
-    "typecheck": "pnpm --filter @tde.io/plexis run typecheck"
+    "typecheck": "pnpm --filter @tde.io/plexis run typecheck",
+    "docs": "pnpm --filter @tde.io/docs run dev",
+    "docs:build": "pnpm --filter @tde.io/docs run build"
   },
   "packageManager": "pnpm@11.3.0",
   "engines": {

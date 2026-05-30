@@ -1,0 +1,133 @@
+---
+title: Contributor Guide
+description: Set up the monorepo, run tests, build the library, and update the docs.
+---
+
+## Prerequisites
+
+- **Node.js 24** — the workspace `engines` field requires exactly v24
+- **pnpm 11.3.0** — declared as `packageManager` in the root `package.json`
+
+## Clone and Install
+
+```bash
+git clone https://github.com/claudio-darkkenergy/plexis.git
+cd plexis
+pnpm install
+```
+
+`pnpm install` runs from the repository root and installs all workspace packages (`@tde.io/plexis` and `@tde.io/docs`) from a single lockfile.
+
+## Repository Layout
+
+```
+plexis/
+  packages/
+    plexis/          ← @tde.io/plexis — published library
+  apps/
+    docs/            ← @tde.io/docs — this Astro Starlight site
+  .github/
+    workflows/       ← build.yml, test.yml, publish.yml, docs.yml
+```
+
+## Running Tests
+
+From the repository root:
+
+```bash
+pnpm test
+```
+
+This delegates to `@tde.io/plexis` and runs all tests via Vitest. Tests live in `packages/plexis/tests/`.
+
+## Building the Library
+
+From the repository root:
+
+```bash
+pnpm build
+```
+
+Produces three output formats under `packages/plexis/dist/`:
+- `dist/esm/` — ES modules
+- `dist/cjs/` — CommonJS
+- `dist/types/` — TypeScript declaration files
+
+## Typechecking
+
+```bash
+pnpm typecheck
+```
+
+Runs `tsc --noEmit` scoped to `@tde.io/plexis`.
+
+## Running Examples
+
+From `packages/plexis/`:
+
+```bash
+pnpm run example:order
+pnpm run example:payment
+pnpm run example:graph
+```
+
+## Updating the Docs
+
+Start the local dev server from the repository root:
+
+```bash
+pnpm docs
+```
+
+This starts the Astro dev server for `apps/docs/` at `http://localhost:4321`. Edit MDX files under `apps/docs/src/content/docs/` — the dev server live-reloads on every save.
+
+Build the docs site to verify there are no errors:
+
+```bash
+pnpm docs:build
+```
+
+This produces a static site under `apps/docs/dist/`. The docs build is independent of the library build — `pnpm docs:build` does not require `pnpm build` to have run first (no docs module imports the library yet).
+
+## Version Model
+
+The docs site documents the **latest published release** of `@tde.io/plexis` — what users get when they run `npm install @tde.io/plexis`. The site's `@tde.io/plexis` devDependency uses `workspace:*`, which resolves to the in-repo package. Because the docs currently contain no code that imports the library at build time, this is equivalent to documenting the published version. Update the docs pages in the same PR as any API change so they stay in sync.
+
+If you add a doc page that actually imports from `@tde.io/plexis` at build time (e.g., the deferred interactive playground), `pnpm docs:build` will then require the library to be built first (`pnpm build`). Until that happens, the docs build is independent.
+
+## Vercel Preview Deployments
+
+When you push a branch, the Vercel GitHub integration automatically creates a preview deployment and posts a URL to the commit status. This lets reviewers see docs changes live before merging.
+
+Production deploys happen automatically when a commit lands on `main`.
+
+If the Vercel build fails but `pnpm docs:build` passes locally, check the Vercel build logs. The most common cause is a workspace dependency resolution issue — verify that the Vercel project settings have **Root Directory** set to `apps/docs` and that pnpm workspace detection is enabled. Vercel handles this automatically for monorepos that have a root `pnpm-workspace.yaml`.
+
+## CI Workflows
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `build.yml` | Push to any branch, tag `v*.*.*` | Typechecks and builds the library |
+| `test.yml` | After `build.yml` succeeds | Runs the Vitest test suite |
+| `publish.yml` | Tag `v*.*.*` | Publishes `@tde.io/plexis` to npm with OIDC provenance |
+| `docs.yml` | Push to any branch | Builds the Astro docs site to catch MDX errors |
+
+The `docs.yml` workflow is independent — it does not gate library CI and library CI does not gate it.
+
+## Releasing a New Version
+
+1. Bump the version in `packages/plexis/package.json`:
+
+   ```bash
+   cd packages/plexis && npm version patch --no-git-tag-version
+   ```
+
+2. Commit and push to `main`.
+
+3. Push a matching tag to trigger Publish:
+
+   ```bash
+   git tag v1.2.3 && git push origin v1.2.3
+   ```
+
+The Publish workflow authenticates via GitHub OIDC — no `NPM_TOKEN` secret is needed.

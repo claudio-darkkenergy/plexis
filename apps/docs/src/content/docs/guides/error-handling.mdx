@@ -1,0 +1,89 @@
+---
+title: Error Handling
+description: Understand PlexisError, error codes, and ErrorPolicy for controlling how Plexis handles failures.
+---
+
+Plexis uses a single error class — `PlexisError` — for all structural and runtime errors. Every error carries a `code` that identifies the specific failure.
+
+## PlexisError
+
+`PlexisError extends Error` and adds structured metadata:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `code` | string | Machine-readable error code |
+| `domainId` | string | Domain the error originated in (optional) |
+| `pipelineId` | string | Pipeline the error originated in (optional) |
+| `nodeId` | string | Node or state the error relates to (optional) |
+| `context` | any | Context snapshot at the time of the error |
+
+## Error Codes
+
+| Code | Thrown when |
+| --- | --- |
+| `UNKNOWN_EVENT` | An event is sent to a state that has no matching edge (strict mode only) |
+| `STATE_MISMATCH` | `followFrom()` is called from a state other than the current state |
+| `UNKNOWN_INITIAL_STATE` | The `initial` state in the setup return does not exist |
+| `UNKNOWN_INITIAL_NODE` | The `initial` node in the setup return does not exist |
+| `UNKNOWN_TARGET_STATE` | An edge's `target` names a state that was not registered |
+| `UNKNOWN_TARGET_NODE` | A fork's `target` names a node that was not registered |
+| `UNKNOWN_NODE` | `inspectNode()` is called with a non-existent node ID |
+| `BUILDER_CLOSED` | A registration helper (`state`, `node`, etc.) is called outside an active setup function |
+
+## Catching Errors
+
+For most applications, wrap `follow()` and `run()` in a try/catch:
+
+```typescript
+import { PlexisError } from '@tde.io/plexis';
+
+try {
+  const result = await order.follow('SUBMIT');
+} catch (err) {
+  if (err instanceof PlexisError) {
+    console.error(`[${err.code}] ${err.message}`);
+    // err.domainId, err.pipelineId, err.nodeId, err.context are available
+  }
+}
+```
+
+## ErrorPolicy
+
+Both domains and pipelines accept an `errorPolicy` that controls what happens when a handler (action, guard, or lifecycle hook) throws an unexpected error:
+
+| Policy | Behavior |
+| --- | --- |
+| `'throw'` | Re-throw the error immediately (default) |
+| `'return'` | Return `status: 'error'` in the result without throwing |
+| `'trace-and-return'` | Record the error in the tracer and return `status: 'error'` |
+
+Set the policy in the setup return:
+
+```typescript
+const order = defineDomain('order', () => {
+  // ...
+  return { context: {}, initial: 'pending', errorPolicy: 'return' } as const;
+});
+```
+
+Or via options (for pipeline):
+
+```typescript
+const payment = definePipeline('payment', () => {
+  // ...
+  return { initial: 'validate' };
+}, { errorPolicy: 'trace-and-return', tracer });
+```
+
+## BUILDER_CLOSED
+
+Registration helpers (`state`, `edge`, `node`, `fork`, `terminal`) are only valid inside an active builder scope opened by `defineDomain` or `definePipeline`. Calling them outside throws `PlexisError` with code `BUILDER_CLOSED`:
+
+```typescript
+import { state } from '@tde.io/plexis';
+
+// Throws PlexisError: BUILDER_CLOSED
+state('pending', { edges: {} });
+```
+
+This safeguard prevents accidentally sharing registration calls across setup functions or calling helpers at module load time outside a setup context.

@@ -1,0 +1,239 @@
+---
+title: API Reference
+description: Complete reference for all public exports from @tde.io/plexis.
+---
+
+## Definition Functions
+
+### `defineDomain(id, setup, options?)`
+
+Creates and returns a `Domain` instance. The setup function runs synchronously; `state()` registrations are collected and used to build the domain.
+
+```typescript
+function defineDomain<TContext, TEdges>(
+  id: string,
+  setup: () => DomainSetupResult<TContext>,
+  options?: DefineDomainOptions<TContext>
+): Domain<TContext, TEdges>
+```
+
+`DomainSetupResult`:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `context` | `TContext` | Initial context |
+| `initial` | string | Initial state ID |
+| `strict` | `boolean` | Throw on unknown events instead of returning `'ignored'` |
+| `errorPolicy` | `ErrorPolicy` | Default error policy for handlers |
+
+`DefineDomainOptions`:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `tracer` | `Tracer` | Tracer instance to attach |
+| `merge` | function | Custom context merge function `(prev, patch, metadata) => TContext` |
+
+---
+
+### `definePipeline(id, setup, options?)`
+
+Creates and returns a `Pipeline` instance. The setup function runs synchronously; `node()` registrations are collected.
+
+```typescript
+function definePipeline<TContext>(
+  id: string,
+  setup: () => PipelineSetupResult,
+  options?: DefinePipelineOptions<TContext>
+): Pipeline<TContext>
+```
+
+`PipelineSetupResult`:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `initial` | string | ID of the first node to execute |
+
+`DefinePipelineOptions`:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `tracer` | `Tracer` | Tracer instance to attach |
+| `errorPolicy` | `ErrorPolicy` | Default error policy for node actions |
+| `merge` | function | Custom context merge function `(prev, patch, metadata) => TContext` |
+
+---
+
+## Registration Helpers
+
+These functions are only valid inside an active `defineDomain` or `definePipeline` setup function. Calling them outside throws `PlexisError` with code `BUILDER_CLOSED`.
+
+### `state(id, def)`
+
+Registers a state in the current domain builder scope.
+
+```typescript
+function state<TContext>(id: string, def: StateNodeDef<TContext>): void
+```
+
+`StateNodeDef` fields:
+
+| Field | Type |
+| --- | --- |
+| `edges` | `Record<string, EdgeDef>` |
+| `onEnter` | `(ctx, input: StateHookInput) => patch` |
+| `onExit` | `(ctx, input: StateHookInput) => patch` |
+| `pipeline` | `Pipeline` |
+| `terminal` | `boolean` |
+
+---
+
+### `edge(def)`
+
+Creates an `EdgeDef` for use in a state's `edges` map.
+
+```typescript
+function edge<TContext>(def: EdgeDef<TContext>): EdgeDef<TContext>
+```
+
+`EdgeDef` fields:
+
+| Field | Type |
+| --- | --- |
+| `target` | string |
+| `guard` | `(ctx, input: GuardInput) => boolean` |
+| `action` | `(ctx, input: TransitionActionInput) => patch` |
+| `pipeline` | `Pipeline` |
+
+---
+
+### `node(id, def)`
+
+Registers a node in the current pipeline builder scope.
+
+```typescript
+function node<TContext>(id: string, def: PipelineNodeDef<TContext>): void
+```
+
+`PipelineNodeDef` fields:
+
+| Field | Type |
+| --- | --- |
+| `action` | `(ctx, input: PipelineActionInput) => patch` |
+| `forks` | array of `PipelineForkDef` |
+| `terminal` | `boolean` |
+
+---
+
+### `fork(condition, target, options?)`
+
+Creates a `PipelineForkDef` for use in a node's `forks` array.
+
+```typescript
+function fork<TContext>(
+  condition: ((ctx, input) => boolean | Promise<boolean>) | undefined,
+  target: string | Pipeline<TContext>,
+  options?: { label?: string; metadata?: Record<string, unknown> }
+): PipelineForkDef<TContext>
+```
+
+Pass `undefined` as the condition for an unconditional forward edge.
+
+---
+
+### `terminal(def?)`
+
+Creates a `PipelineNodeDef` with `terminal: true`. Optionally accepts a partial node definition (excluding `terminal`).
+
+```typescript
+function terminal<TContext>(
+  def?: Omit<PipelineNodeDef<TContext>, 'terminal'>
+): PipelineNodeDef<TContext>
+```
+
+---
+
+## Tracer
+
+### `createTracer(options?)`
+
+Creates a `Tracer` instance. See the [Tracer guide](/guides/tracer/) for full documentation.
+
+```typescript
+function createTracer(options?: TracerOptions): Tracer
+```
+
+`Tracer` methods:
+
+| Method | Returns | Description |
+| --- | --- | --- |
+| `subscribe(listener)` | unsubscribe fn | Listen to live trace events |
+| `history()` | `TraceEvent[]` | All recorded events |
+| `traces()` | `string[]` | All trace IDs |
+| `byTraceId(id)` | `TraceEvent[]` | Events for one trace |
+| `export(format)` | any | Export as `'json'`, `'text'`, or `'tree'` |
+| `clear()` | void | Remove all recorded events |
+
+---
+
+## Domain Instance
+
+`Domain` — returned by `defineDomain()`.
+
+| Member | Type | Description |
+| --- | --- | --- |
+| `id` | string | Domain identifier |
+| `state` | string | Current state ID |
+| `context` | `TContext` | Current context |
+| `current` | `CurrentStateNode` | Current state node with scoped `follow` and `can` |
+| `follow(event, payload?)` | `Promise<DomainFollowResult>` | Trigger a transition |
+| `followFrom(state, event, payload?)` | `Promise<DomainFollowResult>` | Trigger from a specific state (throws on mismatch) |
+| `can(event, payload?)` | `boolean` | Check if transition is allowed without side effects |
+| `subscribe(listener)` | unsubscribe fn | Subscribe to state changes |
+| `snapshot()` | `DomainSnapshot` | Capture current state, context, and history length |
+| `restore(snapshot)` | void | Restore from a snapshot |
+| `history()` | `DomainHistoryEntry[]` | All recorded transitions |
+| `describe()` | `GraphDescriptor` | Static graph representation |
+| `trace(format?)` | any | Export trace data |
+| `inspectNode(node, options?)` | `NodeInspection` | Inspect a node's paths and attachments |
+| `graph` | `DomainGraph` | Graph query API |
+
+---
+
+## Pipeline Instance
+
+`Pipeline` — returned by `definePipeline()`.
+
+| Member | Type | Description |
+| --- | --- | --- |
+| `id` | string | Pipeline identifier |
+| `run(context, input?)` | `Promise<PipelineRunResult>` | Execute the pipeline |
+| `describe()` | `GraphDescriptor` | Static graph representation |
+| `trace(format?)` | any | Export trace data |
+| `inspectNode(node, options?)` | `NodeInspection` | Inspect a node's paths |
+| `graph` | `PipelineGraph` | Graph query API |
+
+---
+
+## Errors
+
+### `PlexisError`
+
+`PlexisError extends Error`. See the [Error Handling guide](/guides/error-handling/) for full documentation.
+
+Error codes: `UNKNOWN_EVENT`, `STATE_MISMATCH`, `UNKNOWN_INITIAL_STATE`, `UNKNOWN_INITIAL_NODE`, `UNKNOWN_TARGET_STATE`, `UNKNOWN_TARGET_NODE`, `UNKNOWN_NODE`, `BUILDER_CLOSED`.
+
+---
+
+## Key Types
+
+| Type | Description |
+| --- | --- |
+| `DomainFollowResult` | Return from `domain.follow()` — `status`, `from`, `to`, `context`, `traceId` |
+| `PipelineRunResult` | Return from `pipeline.run()` — `status`, `finalNode`, `context`, `localTrace` |
+| `DomainSnapshot` | Captured state + context + history length |
+| `DomainHistoryEntry` | Single transition record |
+| `GraphDescriptor` | Static graph (nodes, edges, attachments) |
+| `TraceEvent` | Single recorded trace event |
+| `TraceLevel` | `'domain'`, `'state'`, `'edge'`, `'pipeline'`, `'pipeline-node'`, `'fork'`, `'action'`, `'guard'`, `'condition'` |
+| `ErrorPolicy` | `'throw'`, `'return'`, or `'trace-and-return'` |
+| `PatchLike` | `Partial<TContext>`, `void`, `null`, or `undefined` |

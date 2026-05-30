@@ -19,7 +19,15 @@
       "Bash(echo \"EXIT: $?\")",
       "Bash(yq eval *)",
       "Bash(grep -E '^\\(src|tests|examples\\)$')",
-      "Bash(git -C /Users/claudionunezjr/Documents/Projects/plexis status --short)"
+      "Bash(git -C /Users/claudionunezjr/Documents/Projects/plexis status --short)",
+      "Bash(npm view *)",
+      "Bash(npm search *)",
+      "Bash(npx --no-install openspec validate docs-site-starlight --strict)",
+      "Bash(pnpm approve-builds *)",
+      "Bash(pnpm config *)",
+      "Bash(pnpm docs:build *)",
+      "Bash(pnpm -r list --depth -1)",
+      "Bash(openspec validate *)"
     ]
   }
 }
