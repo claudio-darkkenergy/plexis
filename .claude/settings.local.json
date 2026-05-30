@@ -27,7 +27,8 @@
       "Bash(pnpm config *)",
       "Bash(pnpm docs:build *)",
       "Bash(pnpm -r list --depth -1)",
-      "Bash(openspec validate *)"
+      "Bash(openspec validate *)",
+      "Bash(openspec --version)"
     ]
   }
 }

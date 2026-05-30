@@ -1,11 +1,10 @@
 name: Build
 
 on:
+  pull_request:
   push:
     tags:
       - 'v*.*.*'
-    branches:
-      - '**'
 
 jobs:
   build:
