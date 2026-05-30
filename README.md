@@ -22,7 +22,7 @@ import { defineDomain, definePipeline, state, edge, node, fork, terminal } from 
 
 type OrderContext = { cardValid: boolean };
 
-// Pipeline: runs once per invocation — validate then route to charge or decline
+// Pipeline: runs once per invocation — validate then route to charge or decline.
 const payment = definePipeline<OrderContext>('payment', () => {
   node('validate', {
     forks: [
