@@ -28,6 +28,15 @@ export default defineConfig({
           ],
         },
         {
+          label: 'Advanced',
+          items: [
+            { label: 'API Route',        slug: 'guides/advanced/api-route' },
+            { label: 'Multi-step Form',  slug: 'guides/advanced/multi-step-form' },
+            { label: 'React',            slug: 'guides/advanced/react' },
+            { label: 'Vue',              slug: 'guides/advanced/vue' },
+          ],
+        },
+        {
           label: 'Reference',
           items: [{ label: 'API', slug: 'reference/api' }],
         },
