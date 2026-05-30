@@ -13,7 +13,13 @@
       "Bash(pnpm typecheck *)",
       "Bash(pnpm build *)",
       "Bash(pnpm test *)",
-      "Bash(pnpm pack *)"
+      "Bash(pnpm pack *)",
+      "Bash(git mv *)",
+      "Bash(pnpm run *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(yq eval *)",
+      "Bash(grep -E '^\\(src|tests|examples\\)$')",
+      "Bash(git -C /Users/claudionunezjr/Documents/Projects/plexis status --short)"
     ]
   }
 }

@@ -69,13 +69,6 @@ The two layers compose naturally: an edge on a domain can invoke a pipeline, so 
 
 Plexis has no runtime dependencies. It runs in Node.js ≥ 19, modern browsers, and serverless environments without polyfills.
 
-## Repository Layout
-
-```
-packages/plexis/   — source and build of the published @tde.io/plexis package
-apps/docs/         — reserved slot for the future documentation site (not yet scaffolded)
-```
-
 ## CI & Releasing
 
 Three GitHub Actions workflows form the delivery pipeline:
