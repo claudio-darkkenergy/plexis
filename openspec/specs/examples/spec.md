@@ -1,17 +1,22 @@
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Three runnable example files exist in `examples/`
 
-The repository SHALL contain an `examples/` directory with three self-contained TypeScript demo files that run against the source barrel (`src/index.js`) without a prior build step. Each SHALL be executable via an `npm run example:*` script. All three SHALL type-check with `tsc --noEmit` using `examples/tsconfig.json`.
+The library package SHALL contain an `examples/` directory at `packages/plexis/examples/` with three self-contained TypeScript demo files that run against the source barrel (`../src/index.js`) without a prior build step. Each SHALL be executable via a `pnpm run example:*` script defined in `packages/plexis/package.json`, runnable either inside the package (`cd packages/plexis && pnpm run example:order`) or via a filter from the root (`pnpm --filter @tde.io/plexis run example:order`). All three SHALL type-check with `tsc --noEmit`.
 
 #### Scenario: Each example script exits successfully
 
-- **WHEN** a developer runs `npm run example:order`, `npm run example:payment`, or `npm run example:graph`
+- **WHEN** a developer runs `pnpm --filter @tde.io/plexis run example:order`, `pnpm --filter @tde.io/plexis run example:payment`, or `pnpm --filter @tde.io/plexis run example:graph` from the repository root
 - **THEN** each script SHALL complete with exit code 0 and produce readable console output
+
+#### Scenario: Examples run inside the package directory
+
+- **WHEN** a developer runs `pnpm run example:order` from `packages/plexis/`
+- **THEN** the script SHALL complete with exit code 0 and produce readable console output
 
 ### Requirement: `order-domain.ts` demonstrates the full domain lifecycle
 
-`examples/order-domain.ts` SHALL showcase `defineDomain`, `definePipeline`, `state`, `edge`, `node`, `fork`, `terminal`, `createTracer`, guard evaluation, edge action, an attached edge pipeline, `onEnter` lifecycle hook, `follow`, `can`, `followFrom`, `snapshot`/`restore`, `history`, and tracer output in `tree` format.
+`packages/plexis/examples/order-domain.ts` SHALL showcase `defineDomain`, `definePipeline`, `state`, `edge`, `node`, `fork`, `terminal`, `createTracer`, guard evaluation, edge action, an attached edge pipeline, `onEnter` lifecycle hook, `follow`, `can`, `followFrom`, `snapshot`/`restore`, `history`, and tracer output in `tree` format.
 
 #### Scenario: Order follows SUBMIT and transitions to processing
 
@@ -30,7 +35,7 @@ The repository SHALL contain an `examples/` directory with three self-contained 
 
 ### Requirement: `payment-pipeline.ts` demonstrates pipeline branching and trace export
 
-`examples/payment-pipeline.ts` SHALL showcase `definePipeline`, `node`, `fork`, `terminal`, branching via first-match-wins conditions, `pipeline.run()`, and `pipeline.trace('text')`.
+`packages/plexis/examples/payment-pipeline.ts` SHALL showcase `definePipeline`, `node`, `fork`, `terminal`, branching via first-match-wins conditions, `pipeline.run()`, and `pipeline.trace('text')`.
 
 #### Scenario: Valid card follows the charge path
 
@@ -49,7 +54,7 @@ The repository SHALL contain an `examples/` directory with three self-contained 
 
 ### Requirement: `graph-inspection.ts` demonstrates static introspection APIs
 
-`examples/graph-inspection.ts` SHALL showcase `pipeline.inspectNode()`, `domain.inspectNode()`, `domain.graph.reachableFrom()`, `domain.describe()`, `inbound`/`outbound` edges, `pathsTo`/`pathsFrom`, and cross-boundary ref inspection via a `GraphNodeRef`.
+`packages/plexis/examples/graph-inspection.ts` SHALL showcase `pipeline.inspectNode()`, `domain.inspectNode()`, `domain.graph.reachableFrom()`, `domain.describe()`, `inbound`/`outbound` edges, `pathsTo`/`pathsFrom`, and cross-boundary ref inspection via a `GraphNodeRef`.
 
 #### Scenario: inspectNode returns inbound and outbound edges
 

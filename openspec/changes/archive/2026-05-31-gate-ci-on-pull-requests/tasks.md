@@ -23,7 +23,7 @@
 
 ## 5. Live verification (post-merge of the workflow change)
 
-- [ ] 5.1 With the updated workflows on the PR branch, confirm `Build`, `Test`, and `Docs` enqueue for the pull request
+- [x] 5.1 With the updated workflows on the PR branch, confirm `Build`, `Test`, and `Docs` enqueue for the pull request
 - [x] 5.2 Confirm a plain branch push without an open PR enqueues no workflow runs
-- [ ] 5.3 On the next release, confirm the `v*.*.*` tag drives `Build` → `Test` → `Publish` → `Smoke Test` end to end
+- [x] 5.3 On the next release, confirm the `v*.*.*` tag drives `Build` → `Test` → `Publish` → `Smoke Test` end to end
 <!-- NOTE: Tasks 5.1–5.3 require a live PR/tag push on GitHub to observe. Complete these after pushing the branch and opening a PR. -->

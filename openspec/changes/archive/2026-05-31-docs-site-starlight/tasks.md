@@ -45,7 +45,7 @@
 - [x] 6.1 Create a new Vercel project linked to the GitHub repository (via Vercel dashboard or CLI).
 - [x] 6.2 In Vercel project settings, set **Root Directory** to `apps/docs` and confirm Vercel detects the pnpm workspace (so it installs from the repo root and `workspace:*` resolves).
 - [x] 6.3 Confirm Vercel detects the Astro framework automatically (or set it manually to Astro).
-- [ ] 6.4 Confirm the production domain is assigned and the project deploys successfully on push to `main`.
+- [x] 6.4 Confirm the production domain is assigned and the project deploys successfully on push to `main`.
 
 ## 7. Verify the build end to end
 
@@ -59,5 +59,5 @@
 
 - [x] 8.1 Push the branch and confirm the `docs.yml` workflow runs and exits 0.
 - [x] 8.2 Confirm the Vercel GitHub integration creates a preview deployment for the branch and posts a URL to the commit status.
-- [ ] 8.3 Merge to `main` and confirm Vercel triggers a production deployment.
+- [x] 8.3 Merge to `main` and confirm Vercel triggers a production deployment.
 - [x] 8.4 Confirm `pnpm -r list --depth -1` includes `@tde.io/docs` in the workspace project list.
