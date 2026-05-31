@@ -10,6 +10,7 @@ export default defineConfig({
   },
   integrations: [
     starlight({
+      customCss: ['./src/styles/custom.css'],
       title: 'Plexis',
       description:
         'Zero-dependency TypeScript library for modeling business state with domain state machines and finite workflow pipelines.',

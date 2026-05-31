@@ -28,7 +28,8 @@
       "Bash(pnpm docs:build *)",
       "Bash(pnpm -r list --depth -1)",
       "Bash(openspec validate *)",
-      "Bash(openspec --version)"
+      "Bash(openspec --version)",
+      "Bash(pnpm --filter @tde.io/docs build)"
     ]
   }
 }
