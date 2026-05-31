@@ -1,7 +1,9 @@
 ---
 title: Domain
-description: Model durable business state with defineDomain(), state(), edge(), and lifecycle hooks.
+description: Common use cases for defining domains — states, transitions, guards, lifecycle hooks, subscriptions, and snapshots.
 ---
+
+This guide walks through the most common domain patterns: defining states and edges, guarding transitions, running lifecycle hooks, subscribing to changes, and persisting flow state with snapshots. For complete signatures and field tables, see the [Definition Functions](/reference/definition-functions/), [Registration Helpers](/reference/registration-helpers/), and [Domain Instance](/reference/domain/) reference pages.
 
 A **Domain** models durable business state that persists across time. It has named states, transitions (edges) triggered by events, lifecycle hooks, and can invoke pipelines on transitions.
 
@@ -111,16 +113,7 @@ console.log(result.to);      // 'processing'
 console.log(result.context); // updated context
 ```
 
-`DomainFollowResult` fields:
-
-| Field | Type | Description |
-| --- | --- | --- |
-| `status` | string | `'followed'`, `'blocked'`, `'ignored'`, or `'error'` |
-| `event` | string | The event that was sent |
-| `from` | string | State before the transition |
-| `to` | string | State after transition (`undefined` if blocked) |
-| `context` | object | Context after the transition |
-| `traceId` | string | Trace identifier for this call |
+See [DomainFollowResult](/reference/types#domainfollowresult) for the complete field reference.
 
 ## Checking Whether a Transition Is Allowed
 

@@ -1,34 +1,15 @@
 ---
 title: Error Handling
-description: Understand PlexisError, error codes, and ErrorPolicy for controlling how Plexis handles failures.
+description: Common patterns for catching PlexisError, using ErrorPolicy to control failure behavior, and understanding the BUILDER_CLOSED safeguard.
 ---
+
+This guide covers the most common error-handling patterns: catching errors, choosing an error policy, and understanding when errors are thrown vs. returned. For complete field tables and the full list of error codes, see the [Errors reference](/reference/errors/) and [ErrorPolicy reference](/reference/types#errorpolicy).
 
 Plexis uses a single error class — `PlexisError` — for all structural and runtime errors. Every error carries a `code` that identifies the specific failure.
 
 ## PlexisError
 
-`PlexisError extends Error` and adds structured metadata:
-
-| Field | Type | Description |
-| --- | --- | --- |
-| `code` | string | Machine-readable error code |
-| `domainId` | string | Domain the error originated in (optional) |
-| `pipelineId` | string | Pipeline the error originated in (optional) |
-| `nodeId` | string | Node or state the error relates to (optional) |
-| `context` | any | Context snapshot at the time of the error |
-
-## Error Codes
-
-| Code | Thrown when |
-| --- | --- |
-| `UNKNOWN_EVENT` | An event is sent to a state that has no matching edge (strict mode only) |
-| `STATE_MISMATCH` | `followFrom()` is called from a state other than the current state |
-| `UNKNOWN_INITIAL_STATE` | The `initial` state in the setup return does not exist |
-| `UNKNOWN_INITIAL_NODE` | The `initial` node in the setup return does not exist |
-| `UNKNOWN_TARGET_STATE` | An edge's `target` names a state that was not registered |
-| `UNKNOWN_TARGET_NODE` | A fork's `target` names a node that was not registered |
-| `UNKNOWN_NODE` | `inspectNode()` is called with a non-existent node ID |
-| `BUILDER_CLOSED` | A registration helper (`state`, `node`, etc.) is called outside an active setup function |
+`PlexisError extends Error` and adds structured metadata. See [PlexisError](/reference/errors#plexiserror) for the complete field reference and the full list of [error codes](/reference/errors#error-codes).
 
 ## Catching Errors
 
@@ -51,11 +32,7 @@ try {
 
 Both domains and pipelines accept an `errorPolicy` that controls what happens when a handler (action, guard, or lifecycle hook) throws an unexpected error:
 
-| Policy | Behavior |
-| --- | --- |
-| `'throw'` | Re-throw the error immediately (default) |
-| `'return'` | Return `status: 'error'` in the result without throwing |
-| `'trace-and-return'` | Record the error in the tracer and return `status: 'error'` |
+See [ErrorPolicy](/reference/types#errorpolicy) for the complete value reference.
 
 Set the policy in the setup return:
 

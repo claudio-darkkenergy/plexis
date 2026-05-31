@@ -1,0 +1,146 @@
+---
+title: Tracer
+description: Reference for createTracer, TracerOptions, and the Tracer interface.
+---
+
+The tracer collects structured events emitted by domains and pipelines at runtime. Attach a `Tracer` instance to a domain or pipeline via its `options.tracer` field.
+
+## `createTracer(options?)`
+
+Creates a `Tracer` instance.
+
+```typescript
+function createTracer(options?: TracerOptions): Tracer
+```
+
+### Parameters
+
+**`options`** `TracerOptions` *(optional)*
+
+Tracer configuration:
+
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `enabled` | `boolean` | No | `true` | When `false`, the tracer does not record events |
+| `captureContext` | `boolean \| 'before' \| 'after' \| 'both'` | No | `false` | Whether to snapshot context on each event; `'before'`, `'after'`, or `'both'` capture snapshots before/after the handler |
+| `maxEvents` | `number` | No | `10000` | Maximum number of events held in memory; oldest events are dropped when the cap is reached |
+| `clock` | `() => number` | No | — | Custom timestamp function; defaults to an internal monotonic clock |
+| `idFactory` | `() => string` | No | — | Custom event ID generator; defaults to an internal UUID factory |
+| `onSubscriberError` | `(error: unknown) => void` | No | — | Called when a subscriber throws; subscriber errors are always isolated from the tracer |
+
+### Return value
+
+`Tracer`:
+
+| Member | Parameters | Returns | Description |
+| --- | --- | --- | --- |
+| `captureContext` | — | `boolean \| 'before' \| 'after' \| 'both'` | Reflects the `captureContext` option in effect |
+| `subscribe(listener)` | `listener: (event: TraceEvent) => void` | `() => void` | Listen to live trace events; returns an unsubscribe function |
+| `record(partial)` | `partial: Partial<TraceEvent> & Pick<TraceEvent, 'traceId' \| 'level' \| 'type'>` | `TraceEvent \| undefined` | Record a trace event; returns `undefined` when recording is disabled |
+| `history()` | — | `TraceEvent[]` | All recorded events |
+| `traces()` | — | `string[]` | All trace IDs |
+| `byTraceId(id)` | `id: string` | `TraceEvent[]` | Events for one trace |
+| `export(format)` | `format: 'json' \| 'text' \| 'tree'` | `unknown` | Export trace data in the given format |
+| `clear()` | — | `void` | Remove all recorded events |
+
+### Example
+
+```typescript
+import { createTracer, defineDomain, state, edge } from '@tde.io/plexis';
+
+const tracer = createTracer({ captureContext: 'after', maxEvents: 500 });
+
+const order = defineDomain('order', () => {
+  state('pending', { edges: { SUBMIT: edge({ target: 'processing' }) } });
+  state('processing', { terminal: true });
+  return { context: {}, initial: 'pending' };
+}, { tracer });
+
+await order.follow('SUBMIT');
+
+const events = tracer.history();
+console.log(events.length); // number of recorded events
+
+const traceIds = tracer.traces();
+const eventsForTrace = tracer.byTraceId(traceIds[0]);
+```
+
+---
+
+## `tracer.subscribe(listener)`
+
+Subscribe to live trace events as they are recorded.
+
+### Parameters
+
+**`listener`** `(event: TraceEvent) => void`
+
+Called synchronously each time an event is recorded.
+
+### Return value
+
+`() => void` — call to unsubscribe.
+
+### Example
+
+```typescript
+import { createTracer } from '@tde.io/plexis';
+
+const tracer = createTracer();
+
+const unsubscribe = tracer.subscribe((event) => {
+  console.log(event.type, event.traceId);
+});
+
+// Later, stop listening:
+unsubscribe();
+```
+
+---
+
+## `tracer.export(format)`
+
+Export all recorded trace data in the given format.
+
+### Parameters
+
+**`format`** `'json' | 'text' | 'tree'`
+
+Export format.
+
+### Return value
+
+`unknown` — the exported representation.
+
+### Example
+
+```typescript
+import { createTracer } from '@tde.io/plexis';
+
+const tracer = createTracer();
+// ... run some domains/pipelines ...
+
+const json = tracer.export('json');
+const text = tracer.export('text');
+const tree = tracer.export('tree');
+```
+
+---
+
+## `tracer.clear()`
+
+Remove all recorded events from memory.
+
+### Return value
+
+`void`
+
+### Example
+
+```typescript
+import { createTracer } from '@tde.io/plexis';
+
+const tracer = createTracer();
+// ... run some operations ...
+tracer.clear(); // reset for next test or session
+```

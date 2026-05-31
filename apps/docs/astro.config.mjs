@@ -39,7 +39,17 @@ export default defineConfig({
         },
         {
           label: 'Reference',
-          items: [{ label: 'API', slug: 'reference/api' }],
+          items: [
+            { label: 'Overview',              slug: 'reference/api' },
+            { label: 'Definition Functions',  slug: 'reference/definition-functions' },
+            { label: 'Registration Helpers',  slug: 'reference/registration-helpers' },
+            { label: 'Handler Input Types',   slug: 'reference/handler-inputs' },
+            { label: 'Tracer',                slug: 'reference/tracer' },
+            { label: 'Domain Instance',       slug: 'reference/domain' },
+            { label: 'Pipeline Instance',     slug: 'reference/pipeline' },
+            { label: 'Errors',                slug: 'reference/errors' },
+            { label: 'Key Types',             slug: 'reference/types' },
+          ],
         },
         {
           label: 'Contributing',

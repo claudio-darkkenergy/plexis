@@ -1,0 +1,261 @@
+---
+title: Registration Helpers
+description: Reference for state, edge, node, fork, and terminal — the helpers used inside defineDomain and definePipeline setup functions.
+---
+
+These functions are only valid inside an active `defineDomain` or `definePipeline` setup function. Calling them outside throws `PlexisError` with code `BUILDER_CLOSED`.
+
+## `state(id, def)`
+
+Registers a state in the current domain builder scope.
+
+```typescript
+function state<TContext>(id: string, def: StateNodeDef<TContext>): void
+```
+
+### Parameters
+
+**`id`** `string`
+
+Unique state identifier.
+
+**`def`** `StateNodeDef<TContext>`
+
+State definition:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `edges` | `Record<string, EdgeDef<TContext>>` | No | Map of event name to edge definition |
+| `onEnter` | `(ctx: TContext, input: StateHookInput) => PatchLike` | No | Hook called when entering this state |
+| `onExit` | `(ctx: TContext, input: StateHookInput) => PatchLike` | No | Hook called when exiting this state |
+| `pipeline` | `Pipeline<TContext>` | No | Pipeline to run on state entry, after `onEnter` |
+| `terminal` | `boolean` | No | When `true`, this is a terminal state |
+| `metadata` | `Record<string, unknown>` | No | Arbitrary user-defined metadata |
+
+### Return value
+
+None (`void`).
+
+### Example
+
+```typescript
+import { defineDomain, state, edge } from '@tde.io/plexis';
+
+const door = defineDomain('door', () => {
+  state('closed', {
+    edges: { OPEN: edge({ target: 'open' }) },
+    onExit: async (ctx) => ({ lastClosed: Date.now() }),
+  });
+  state('open', {
+    edges: { CLOSE: edge({ target: 'closed' }) },
+    onEnter: async (ctx) => ({ lastOpened: Date.now() }),
+  });
+  return { context: { lastOpened: 0, lastClosed: 0 }, initial: 'closed' };
+});
+```
+
+---
+
+## `edge(def)`
+
+Creates an `EdgeDef` for use in a state's `edges` map.
+
+```typescript
+function edge<TContext>(def: EdgeDef<TContext>): EdgeDef<TContext>
+```
+
+### Parameters
+
+**`def`** `EdgeDef<TContext>`
+
+Edge definition:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | `string` | Yes | ID of the target state |
+| `guard` | `(ctx: TContext, input: GuardInput) => boolean \| Promise<boolean>` | No | Guard predicate; transition is blocked when `false` |
+| `action` | `(ctx: TContext, input: TransitionActionInput) => PatchLike` | No | Context patch handler run during the transition |
+| `pipeline` | `Pipeline<TContext>` | No | Pipeline to run as part of the transition, after the action |
+| `metadata` | `Record<string, unknown>` | No | Arbitrary user-defined metadata |
+
+### Return value
+
+`EdgeDef<TContext>` — the same definition object, for inline use in `edges` maps.
+
+### Example
+
+```typescript
+import { defineDomain, state, edge } from '@tde.io/plexis';
+
+type Ctx = { approved: boolean; approvedBy?: string };
+
+const approval = defineDomain<Ctx>('approval', () => {
+  state('pending', {
+    edges: {
+      APPROVE: edge({
+        target: 'approved',
+        guard: (ctx, { payload }) => payload != null,
+        action: (ctx, { payload }) => ({ approvedBy: payload as string }),
+      }),
+      REJECT: edge({ target: 'rejected' }),
+    },
+  });
+  state('approved', { terminal: true });
+  state('rejected', { terminal: true });
+  return { context: { approved: false }, initial: 'pending' };
+});
+```
+
+---
+
+## `node(id, def)`
+
+Registers a node in the current pipeline builder scope.
+
+```typescript
+function node<TContext>(id: string, def: PipelineNodeDef<TContext>): void
+```
+
+### Parameters
+
+**`id`** `string`
+
+Unique node identifier.
+
+**`def`** `PipelineNodeDef<TContext>`
+
+Node definition:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `action` | `(ctx: TContext, input: PipelineActionInput) => PatchLike` | No | Context patch handler for this node |
+| `forks` | `PipelineForkDef<TContext>[]` | No | Ordered list of fork conditions; first match wins |
+| `terminal` | `boolean` | No | When `true`, execution stops after this node |
+| `metadata` | `Record<string, unknown>` | No | Arbitrary user-defined metadata |
+
+### Return value
+
+None (`void`).
+
+### Example
+
+```typescript
+import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+
+type Ctx = { score: number; passed: boolean };
+
+const quiz = definePipeline<Ctx>('quiz', () => {
+  node('grade', {
+    action: async (ctx) => ({ score: 90 }),
+    forks: [
+      fork((ctx) => ctx.score >= 70, 'pass'),
+      fork((ctx) => ctx.score < 70, 'fail'),
+    ],
+  });
+  node('pass', terminal({ action: async () => ({ passed: true }) }));
+  node('fail', terminal({ action: async () => ({ passed: false }) }));
+  return { initial: 'grade' };
+});
+```
+
+---
+
+## `fork(condition, target, options?)`
+
+Creates a `PipelineForkDef` for use in a node's `forks` array.
+
+```typescript
+function fork<TContext>(
+  condition: ((ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>) | undefined,
+  target: string | Pipeline<TContext>,
+  options?: { label?: string; metadata?: Record<string, unknown> }
+): PipelineForkDef<TContext>
+```
+
+### Parameters
+
+**`condition`** `((ctx, input) => boolean | Promise<boolean>) | undefined`
+
+Fork predicate. Pass `undefined` for an unconditional forward edge; otherwise the first fork whose condition returns `true` is followed.
+
+**`target`** `string | Pipeline<TContext>`
+
+ID of the target node, or a sub-pipeline to embed.
+
+**`options`** `{ label?: string; metadata?: Record<string, unknown> }` *(optional)*
+
+Optional label and metadata attached to the fork.
+
+### Return value
+
+`PipelineForkDef<TContext>`:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | `string \| Pipeline<TContext>` | Yes | ID of the target node, or a sub-pipeline |
+| `condition` | `(ctx: TContext, input: PipelineConditionInput) => boolean \| Promise<boolean>` | No | Fork predicate; `undefined` means unconditional |
+| `label` | `string` | No | Human-readable label for this fork path |
+| `metadata` | `Record<string, unknown>` | No | Arbitrary user-defined metadata |
+
+### Example
+
+```typescript
+import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+
+type Ctx = { score: number };
+
+const pipeline = definePipeline<Ctx>('check', () => {
+  node('evaluate', {
+    forks: [
+      fork((ctx) => ctx.score >= 90, 'excellent', { label: 'high-score' }),
+      fork((ctx) => ctx.score >= 60, 'passing',   { label: 'passing' }),
+      fork(undefined, 'failing'),                 // unconditional fallback
+    ],
+  });
+  node('excellent', terminal());
+  node('passing',   terminal());
+  node('failing',   terminal());
+  return { initial: 'evaluate' };
+});
+```
+
+---
+
+## `terminal(def?)`
+
+Creates a `PipelineNodeDef` with `terminal: true`. Optionally accepts a partial node definition (excluding `terminal`).
+
+```typescript
+function terminal<TContext>(
+  def?: Omit<PipelineNodeDef<TContext>, 'terminal'>
+): PipelineNodeDef<TContext>
+```
+
+### Parameters
+
+**`def`** `Omit<PipelineNodeDef<TContext>, 'terminal'>` *(optional)*
+
+Optional action, forks, and metadata for the terminal node.
+
+### Return value
+
+`PipelineNodeDef<TContext>` with `terminal: true`.
+
+### Example
+
+```typescript
+import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+
+type Ctx = { result: string };
+
+const pipeline = definePipeline<Ctx>('process', () => {
+  node('start', {
+    forks: [fork(undefined, 'finish')],
+  });
+  // terminal with an action that patches context before stopping
+  node('finish', terminal({
+    action: async (ctx) => ({ result: 'done' }),
+  }));
+  return { initial: 'start' };
+});
+```

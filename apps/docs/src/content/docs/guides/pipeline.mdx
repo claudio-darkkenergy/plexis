@@ -1,7 +1,9 @@
 ---
 title: Pipeline
-description: Model finite, single-run workflows with definePipeline(), node(), fork(), and terminal().
+description: Common use cases for defining pipelines — nodes, forks, terminal nodes, sub-pipelines, and attaching pipelines to domain edges.
 ---
+
+This guide walks through the most common pipeline patterns: registering nodes with actions, using ordered forks for branching, embedding sub-pipelines, and composing pipelines with domain edges. For complete signatures and field tables, see the [Definition Functions](/reference/definition-functions/), [Registration Helpers](/reference/registration-helpers/), and [Pipeline Instance](/reference/pipeline/) reference pages.
 
 A **Pipeline** models a finite, single-run workflow. Execution starts at the initial node, evaluates ordered forks at each step, and runs until it reaches a terminal node or finds no matching fork.
 
@@ -66,11 +68,7 @@ Forks define ordered forward transitions. The **first** fork whose condition ret
 fork(condition, target, options?)
 ```
 
-| Parameter | Type | Description |
-| --- | --- | --- |
-| `condition` | `(ctx, input) => boolean` | Evaluated in order; first match wins |
-| `target` | string or `Pipeline` | Node ID to jump to, or an inline sub-pipeline |
-| `options.label` | string | Optional label for tracing and graph display |
+See [`fork`](/reference/registration-helpers#forkid-def) for the complete parameter reference.
 
 A fork with `condition: undefined` is an unconditional forward edge:
 
@@ -108,16 +106,7 @@ console.log(result.finalNode); // 'charge'
 console.log(result.context);   // updated context
 ```
 
-`PipelineRunResult` fields:
-
-| Field | Type | Description |
-| --- | --- | --- |
-| `status` | string | `'completed'`, `'stopped'`, or `'error'` |
-| `pipelineId` | string | Pipeline identifier |
-| `finalNode` | string | ID of the last node that executed |
-| `context` | object | Context after all node actions |
-| `traceId` | string | Trace identifier |
-| `localTrace` | array | `TraceEvent` objects recorded during this run |
+See [PipelineRunResult](/reference/types#pipelinerunresult) for the complete field reference.
 
 ## Sub-Pipelines
 
