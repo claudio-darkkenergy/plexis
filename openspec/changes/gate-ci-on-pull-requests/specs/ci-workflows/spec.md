@@ -2,41 +2,35 @@
 
 ### Requirement: Trigger on pull requests and release tags
 
-The build workflow SHALL run automatically on every `pull_request` event (opened, synchronized, or reopened) and on every push of a tag matching `v*.*.*`. The test workflow SHALL run automatically on completion of a build workflow run. Neither workflow MUST run on plain branch pushes — including pushes to `main` — that are not associated with a pull request or a `v*.*.*` tag.
+The workflow SHALL run automatically on every `pull_request` event (opened, synchronized, or reopened) and on every push of a tag matching `v*.*.*`. The `publish` job within the workflow SHALL only run on tag pushes.
 
-#### Scenario: Opening a PR triggers a build run
+#### Scenario: Opening a PR triggers a run
 - **WHEN** a pull request is opened against the repository
-- **THEN** a new build workflow run is enqueued for the pull request's head commit
+- **THEN** a new workflow run is enqueued for the pull request's head commit
 
-#### Scenario: Updating a PR triggers a build run
+#### Scenario: Updating a PR triggers a run
 - **WHEN** a pull request is synchronized (new commits pushed) or reopened
-- **THEN** a new build workflow run is enqueued for the updated head commit
+- **THEN** a new workflow run is enqueued for the updated head commit
 
-#### Scenario: Tag push triggers a build run
+#### Scenario: Tag push triggers a run
 - **WHEN** a tag matching `v*.*.*` is pushed
-- **THEN** a new build workflow run is enqueued
+- **THEN** a new workflow run is enqueued
 
-#### Scenario: A successful build triggers test
-- **WHEN** a build workflow run concludes with `success`
-- **THEN** a new test workflow run is enqueued for the same commit SHA
-
-#### Scenario: A failed build does not trigger test
-- **WHEN** a build workflow run concludes with `failure` or `cancelled`
-- **THEN** no test workflow run is started for that commit
+#### Scenario: A failed job stops the chain
+- **WHEN** a job in the workflow fails
+- **THEN** subsequent dependent jobs are not run
 
 #### Scenario: Push to a feature branch does not trigger a run
 - **WHEN** a commit is pushed to any branch and no pull request is open for it
-- **THEN** no build or test workflow run is started
+- **THEN** no workflow run is started
 
 #### Scenario: Push to main does not trigger a run
 - **WHEN** a commit is pushed to `main` (directly or via a merged PR) and the commit carries no `v*.*.*` tag
-- **THEN** no build or test workflow run is started
+- **THEN** no workflow run is started
 
-#### Scenario: Release pipeline still has build and test on the tag
+#### Scenario: Release pipeline runs build, test, and publish on the tag
 - **WHEN** a `v*.*.*` tag is pushed to cut a release
-- **THEN** the build workflow runs on the tagged commit and uploads the `plexis-dist` artifact
-- **AND** the test workflow runs after the build succeeds
-- **AND** the publish workflow's waits for `Build` and `Test` on that commit are satisfied
+- **THEN** the `build`, `test`, and `publish` jobs run in sequence
 
 ## ADDED Requirements
 
