@@ -84,7 +84,6 @@ Four GitHub Actions workflows form the delivery pipeline:
 |---|---|---|
 | **Build** (`build` job) | pull request, tag `v*.*.*` | Typechecks, builds, uploads `dist/` as artifact `plexis-dist` |
 | **Build** (`test` job) | after `build` job succeeds | Downloads `plexis-dist`, runs `pnpm test` against it |
-| **Docs** | pull request | Builds the Astro docs site to catch MDX/build errors |
 | **Publish** | tag `v*.*.*` | Waits for Build to succeed (both jobs), downloads `plexis-dist`, publishes to npm |
 
 **To release a new version:**

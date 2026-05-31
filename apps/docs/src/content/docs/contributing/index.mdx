@@ -27,7 +27,7 @@ plexis/
   apps/
     docs/            ← @tde.io/docs — this Astro Starlight site
   .github/
-    workflows/       ← build.yml, publish.yml, docs.yml, smoke-test.yml
+    workflows/       ← build.yml, publish.yml, smoke-test.yml
 ```
 
 ## Running Tests
@@ -109,11 +109,10 @@ If the Vercel build fails but `pnpm docs:build` passes locally, check the Vercel
 |---|---|---|
 | `build.yml` / `build` | Pull request, tag `v*.*.*` | Typechecks and builds the library; uploads `plexis-dist` artifact |
 | `build.yml` / `test` | After `build` job succeeds | Downloads `plexis-dist`, runs the Vitest test suite |
-| `docs.yml` | Pull request | Builds the Astro docs site to catch MDX errors |
 | `publish.yml` | Tag `v*.*.*` | Waits for `build.yml` to succeed (both jobs), publishes `@tde.io/plexis` to npm with OIDC provenance |
 | `smoke-test.yml` | After `publish.yml` succeeds | Installs the published package from npm and validates ESM/CJS exports |
 
-CI runs only on pull requests (for development) and on `v*.*.*` tags (for releases). Plain branch pushes trigger no workflow runs.
+CI runs only on pull requests (for development) and on `v*.*.*` tags (for releases). Plain branch pushes trigger no workflow runs. Docs builds and preview deployments are handled by the Vercel GitHub integration.
 
 ## Releasing a New Version
 
