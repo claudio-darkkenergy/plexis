@@ -1,0 +1,198 @@
+---
+title: Domain
+description: Model durable business state with defineDomain(), state(), edge(), and lifecycle hooks.
+---
+
+A **Domain** models durable business state that persists across time. It has named states, transitions (edges) triggered by events, lifecycle hooks, and can invoke pipelines on transitions.
+
+## Defining a Domain
+
+Use `defineDomain()` to create a domain. The setup function runs synchronously and registers states using the `state()` helper.
+
+```typescript
+import { defineDomain, state, edge } from '@tde.io/plexis';
+
+type OrderContext = { orderId: string | null };
+
+const order = defineDomain<OrderContext>('order', () => {
+  state('pending', {
+    edges: {
+      SUBMIT: edge({ target: 'processing' }),
+    },
+  });
+  state('processing', {
+    edges: {
+      FULFILL: edge({ target: 'fulfilled' }),
+    },
+  });
+  state('fulfilled', { terminal: true });
+
+  return {
+    context: { orderId: null },
+    initial: 'pending',
+  } as const;
+});
+```
+
+The `as const` annotation on the return value enables TypeScript to narrow the allowed event names in `follow()` and `can()`.
+
+## States
+
+Register states with `state(id, def)`. A state definition accepts:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `edges` | `Record` of `EdgeDef` | Named transitions out of this state |
+| `onEnter` | async handler | Runs when the domain enters this state |
+| `onExit` | async handler | Runs when the domain exits this state |
+| `pipeline` | `Pipeline` | Runs on every entry to this state |
+| `terminal` | `boolean` | Marks this as a final state |
+
+## Edges
+
+Register an edge on a state using `edge({ target, guard?, action?, pipeline? })`.
+
+```typescript
+state('pending', {
+  edges: {
+    SUBMIT: edge({
+      target: 'processing',
+      guard: (ctx) => ctx.orderId !== null,
+      action: async (ctx) => ({ submitted: true }),
+    }),
+  },
+});
+```
+
+The `guard` receives the current context and returns a boolean. If it returns `false`, the transition is blocked — no hooks or actions run.
+
+The `action` receives the current context and a `TransitionActionInput` (event name, payload, trace ID) and returns a context patch merged as `{ ...prev, ...patch }`.
+
+## Lifecycle Hooks
+
+`onEnter` and `onExit` run when the domain enters or leaves a state. Both receive the current context and a `StateHookInput` (event name, payload, trace ID). Both can return context patches.
+
+```typescript
+state('processing', {
+  onEnter: async (ctx, { event }) => {
+    console.log(`Entered processing via ${event}`);
+    return { enteredAt: Date.now() };
+  },
+  onExit: async (ctx) => {
+    console.log('Leaving processing');
+  },
+  edges: {
+    FULFILL: edge({ target: 'fulfilled' }),
+  },
+});
+```
+
+**Execution order on `follow(event, payload)`:**
+
+1. Guard check — blocks if `false`; no side effects run
+2. `onExit` for the current state
+3. Edge action
+4. Edge pipeline
+5. State transitions to target
+6. `onEnter` for the target state
+7. State entry pipeline
+8. History recorded, subscribers notified
+
+## Advancing State with `follow()`
+
+Call `domain.follow(event, payload?)` to trigger a transition.
+
+```typescript
+const result = await order.follow('SUBMIT');
+
+console.log(result.status);  // 'followed'
+console.log(result.from);    // 'pending'
+console.log(result.to);      // 'processing'
+console.log(result.context); // updated context
+```
+
+`DomainFollowResult` fields:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `status` | string | `'followed'`, `'blocked'`, `'ignored'`, or `'error'` |
+| `event` | string | The event that was sent |
+| `from` | string | State before the transition |
+| `to` | string | State after transition (`undefined` if blocked) |
+| `context` | object | Context after the transition |
+| `traceId` | string | Trace identifier for this call |
+
+## Checking Whether a Transition Is Allowed
+
+Use `domain.can(event)` to test whether an event can be followed from the current state without triggering any side effects:
+
+```typescript
+const canSubmit = await order.can('SUBMIT');
+```
+
+## Subscriptions and History
+
+Subscribe to state changes:
+
+```typescript
+const unsub = order.subscribe((snapshot) => {
+  console.log(snapshot.state, snapshot.context);
+});
+
+// Later:
+unsub();
+```
+
+Retrieve the transition history:
+
+```typescript
+const entries = order.history();
+// Each entry: { from, to, event, payload?, context, timestamp, traceId }
+```
+
+## Snapshots
+
+`snapshot()` captures the current state and context at a point in time. `restore()` winds the domain back to that captured point — useful for undo/redo, testing, and persisting flow state.
+
+```typescript
+// Persist wizard flow to localStorage so the user can resume later
+const snap = order.snapshot();
+localStorage.setItem('order-flow', JSON.stringify(snap));
+
+// On page reload — restore exactly where the user left off
+const saved = localStorage.getItem('order-flow');
+if (saved) order.restore(JSON.parse(saved));
+```
+
+In tests, snapshots let you jump the domain to any starting state without replaying events:
+
+```typescript
+const processingState = { state: 'processing', context: { orderId: '123' }, historyLength: 1 };
+order.restore(processingState);
+
+// Now test transitions from 'processing' directly
+const result = await order.follow('FULFILL');
+```
+
+## Strict Mode
+
+Pass `strict: true` in the setup return to throw a `PlexisError` when an unknown event is sent (instead of returning `status: 'ignored'`):
+
+```typescript
+return { context: {}, initial: 'pending', strict: true } as const;
+```
+
+## TypeScript Edge Inference
+
+Using `as const` on the setup return value lets TypeScript infer the exact set of valid event names:
+
+```typescript
+const order = defineDomain('order', () => {
+  state('pending', { edges: { SUBMIT: edge({ target: 'processing' }) } });
+  state('processing', { terminal: true });
+  return { context: {}, initial: 'pending' } as const;
+});
+
+await order.follow('SUBMIT');  // ✓ OK
+await order.follow('CANCEL');  // ✗ TypeScript error
+```

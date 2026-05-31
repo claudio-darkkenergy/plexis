@@ -1,0 +1,166 @@
+---
+title: API Route
+description: Use a Plexis pipeline as the handler chain for an HTTP endpoint, with a domain tracking the lifecycle of each request.
+---
+
+In this guide a single `POST /api/records` endpoint is backed by a Plexis pipeline whose nodes form the handler chain — validate → service → persist → respond — with forks routing failures to an error-response path. A small `request` domain tracks the lifecycle state of each request independently.
+
+## The handler pipeline
+
+Each stage of request processing is a pipeline node. Forks decide which path the request follows based on the outcome of the preceding node.
+
+```typescript
+import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+
+type RequestCtx = {
+  body: Record<string, unknown>;
+  userId?: string;
+  validated: boolean;
+  recordId?: string;
+  response?: { status: number; body: unknown };
+  error?: string;
+};
+
+const handleRequest = definePipeline<RequestCtx>('handle-request', () => {
+  node('validate', {
+    action: async (ctx) => {
+      const { userId, data } = ctx.body;
+      if (!userId || !data) {
+        return { validated: false, error: 'Missing userId or data' };
+      }
+      return { validated: true, userId: userId as string };
+    },
+    forks: [
+      fork((ctx) => !ctx.validated, 'error-response', { label: 'validation-failed' }),
+      fork((ctx) => ctx.validated,  'service',        { label: 'valid' }),
+    ],
+  });
+
+  node('service', {
+    action: async (ctx) => {
+      if (ctx.userId === 'banned') {
+        return { validated: false, error: 'User not authorized' };
+      }
+      return {};
+    },
+    forks: [
+      fork((ctx) => !ctx.validated, 'error-response', { label: 'service-failed' }),
+      fork(() => true,              'persist',         { label: 'ok' }),
+    ],
+  });
+
+  node('persist', {
+    action: async (ctx) => ({
+      recordId: `rec_${ctx.userId}_${Date.now()}`,
+    }),
+    forks: [fork(() => true, 'respond', { label: 'persisted' })],
+  });
+
+  node('respond', terminal({
+    action: async (ctx) => ({
+      response: { status: 201, body: { id: ctx.recordId, ok: true } },
+    }),
+  }));
+
+  node('error-response', terminal({
+    action: async (ctx) => ({
+      response: { status: 400, body: { error: ctx.error ?? 'Bad request' } },
+    }),
+  }));
+
+  return { initial: 'validate' };
+});
+```
+
+## The request domain
+
+A new domain instance is created per request so concurrent requests do not share state. The domain tracks where each request is in its lifecycle independently from the handler logic.
+
+```typescript
+import { defineDomain, state, edge } from '@tde.io/plexis';
+
+type RequestLifecycle = { requestId: string };
+
+function createRequestDomain(requestId: string) {
+  return defineDomain<RequestLifecycle>('request', () => {
+    state('pending', {
+      edges: {
+        START: edge({ target: 'processing' }),
+      },
+    });
+    state('processing', {
+      edges: {
+        COMPLETE: edge({ target: 'complete' }),
+        FAIL:     edge({ target: 'failed' }),
+      },
+    });
+    state('complete', { terminal: true });
+    state('failed',   { terminal: true });
+
+    return { context: { requestId }, initial: 'pending' };
+  });
+}
+```
+
+## Wiring the HTTP server
+
+The pipeline and domain compose inside a standard Node.js `http` request handler. Because `handleRequest` is just a function that accepts a context object and returns a result, the same pipeline plugs into any framework handler — Express, Hono, Fastify — without modification.
+
+```typescript
+import http from 'node:http';
+
+const server = http.createServer(async (req, res) => {
+  if (req.method !== 'POST' || req.url !== '/api/records') {
+    res.writeHead(404).end();
+    return;
+  }
+
+  let raw = '';
+  for await (const chunk of req) raw += chunk;
+  const body = JSON.parse(raw) as Record<string, unknown>;
+
+  const requestDomain = createRequestDomain(crypto.randomUUID());
+  await requestDomain.follow('START');
+
+  const result = await handleRequest.run({ body, validated: false });
+
+  const { status, body: resBody } = result.context.response!;
+
+  if (status === 201) {
+    await requestDomain.follow('COMPLETE');
+  } else {
+    await requestDomain.follow('FAIL');
+  }
+
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(resBody));
+});
+
+server.listen(3000, () => {
+  console.log('Listening on http://localhost:3000');
+});
+```
+
+Start the server:
+
+```bash
+node dist/server.js
+```
+
+Post a valid request:
+
+```bash
+curl -X POST http://localhost:3000/api/records \
+  -H 'Content-Type: application/json' \
+  -d '{"userId":"alice","data":{"value":42}}'
+```
+
+Post an invalid request (missing `data`):
+
+```bash
+curl -X POST http://localhost:3000/api/records \
+  -H 'Content-Type: application/json' \
+  -d '{"userId":"alice"}'
+```
+
+The missing field routes the pipeline to the `error-response` terminal node, which writes a `400` response. The request domain follows `FAIL` and lands on the `failed` terminal state.

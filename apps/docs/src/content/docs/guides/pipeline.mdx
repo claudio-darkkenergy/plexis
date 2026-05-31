@@ -1,0 +1,164 @@
+---
+title: Pipeline
+description: Model finite, single-run workflows with definePipeline(), node(), fork(), and terminal().
+---
+
+A **Pipeline** models a finite, single-run workflow. Execution starts at the initial node, evaluates ordered forks at each step, and runs until it reaches a terminal node or finds no matching fork.
+
+## Defining a Pipeline
+
+Use `definePipeline()` to create a pipeline. The setup function registers nodes using the `node()` helper and must return `{ initial }` naming the first node to execute.
+
+```typescript
+import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+
+type PaymentContext = { cardValid: boolean; amount: number };
+
+const payment = definePipeline<PaymentContext>('payment', () => {
+  node('validate', {
+    action: async (ctx) => {
+      const ok = ctx.cardValid && ctx.amount > 0;
+      return { validated: ok };
+    },
+    forks: [
+      fork((ctx) => ctx.cardValid,  'charge',  { label: 'card-ok' }),
+      fork((ctx) => !ctx.cardValid, 'decline', { label: 'card-invalid' }),
+    ],
+  });
+
+  node('charge',  terminal());
+  node('decline', terminal());
+
+  return { initial: 'validate' };
+});
+```
+
+## Nodes
+
+Register nodes with `node(id, def)`. A node definition accepts:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `action` | async handler | Runs when the node executes; return value merges into context |
+| `forks` | array of `PipelineForkDef` | Ordered list of forward transitions |
+| `terminal` | `boolean` | Marks this as the final node |
+
+## Actions and Context Patches
+
+An action receives the current context and a `PipelineActionInput` (node ID, pipeline ID, optional input value, trace ID). It returns a **patch** merged as `{ ...prev, ...patch }`.
+
+```typescript
+node('enrich', {
+  action: async (ctx, { input }) => ({
+    enrichedAt: Date.now(),
+    source: input?.source ?? 'unknown',
+  }),
+});
+```
+
+Returning `undefined`, `null`, or `void` leaves the context unchanged.
+
+## Forks
+
+Forks define ordered forward transitions. The **first** fork whose condition returns `true` is taken; remaining forks are not evaluated (first-match-wins).
+
+```typescript
+fork(condition, target, options?)
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `condition` | `(ctx, input) => boolean` | Evaluated in order; first match wins |
+| `target` | string or `Pipeline` | Node ID to jump to, or an inline sub-pipeline |
+| `options.label` | string | Optional label for tracing and graph display |
+
+A fork with `condition: undefined` is an unconditional forward edge:
+
+```typescript
+node('route', {
+  forks: [
+    fork((ctx) => ctx.amount > 1000, 'high-value'),
+    fork(undefined, 'standard'),  // default path
+  ],
+});
+```
+
+## Terminal Nodes
+
+Mark a node as terminal with `terminal()`. No forks are evaluated after a terminal node — the pipeline stops and `PipelineRunResult` is returned.
+
+```typescript
+node('done', terminal());
+
+// With an action:
+node('done', terminal({
+  action: async (ctx) => ({ completedAt: Date.now() }),
+}));
+```
+
+## Running a Pipeline
+
+Call `pipeline.run(context, input?)` to execute it. The pipeline runs to completion unless an error policy stops it.
+
+```typescript
+const result = await payment.run({ cardValid: true, amount: 50 });
+
+console.log(result.status);    // 'completed'
+console.log(result.finalNode); // 'charge'
+console.log(result.context);   // updated context
+```
+
+`PipelineRunResult` fields:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `status` | string | `'completed'`, `'stopped'`, or `'error'` |
+| `pipelineId` | string | Pipeline identifier |
+| `finalNode` | string | ID of the last node that executed |
+| `context` | object | Context after all node actions |
+| `traceId` | string | Trace identifier |
+| `localTrace` | array | `TraceEvent` objects recorded during this run |
+
+## Sub-Pipelines
+
+A fork target can be another `Pipeline` instance. When the fork is taken, the sub-pipeline runs with the current context and its output context flows forward.
+
+```typescript
+const enrichment = definePipeline('enrichment', () => {
+  node('fetch-geo', { action: async () => ({ geo: 'US' }) });
+  node('done', terminal());
+  return { initial: 'fetch-geo' };
+});
+
+const main = definePipeline('main', () => {
+  node('start', {
+    forks: [fork(undefined, enrichment)],
+  });
+  node('finish', terminal());
+  return { initial: 'start' };
+});
+```
+
+## Attaching a Pipeline to a Domain Edge
+
+Pipelines compose with domains: pass a pipeline to an edge's `pipeline` option. The pipeline runs after the edge action and before the state transition.
+
+```typescript
+import { defineDomain, state, edge } from '@tde.io/plexis';
+
+state('pending', {
+  edges: {
+    SUBMIT: edge({ target: 'processing', pipeline: payment }),
+  },
+});
+```
+
+**Execution order on `follow('SUBMIT')`:**
+
+1. Guard check
+2. `onExit` hook for `pending`
+3. Edge action
+4. **`payment` pipeline runs**
+5. State transitions to `processing`
+6. `onEnter` hook for `processing`
+7. State entry pipeline for `processing`

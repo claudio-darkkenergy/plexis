@@ -1,0 +1,134 @@
+---
+title: Tracer
+description: Observe domain and pipeline execution with createTracer() and TraceLevel.
+---
+
+Plexis includes a built-in tracing system for observing execution flow, debugging state machine logic, and capturing structured execution history.
+
+## Creating a Tracer
+
+```typescript
+import { createTracer } from '@tde.io/plexis';
+
+const tracer = createTracer({
+  enabled: true,
+  captureContext: 'after',
+});
+```
+
+`TracerOptions`:
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `true` | Enable or disable recording |
+| `captureContext` | `boolean`, `'before'`, `'after'`, or `'both'` | `false` | Snapshot context in each trace event |
+| `maxEvents` | `number` | unlimited | Maximum events to retain in memory |
+| `clock` | `() => number` | `Date.now` | Custom timestamp source |
+| `idFactory` | `() => string` | `crypto.randomUUID` | Custom ID generator |
+| `onSubscriberError` | function | rethrow | Handler for subscriber errors |
+
+## Attaching a Tracer to a Domain or Pipeline
+
+Pass the tracer in the options object when defining a domain or pipeline:
+
+```typescript
+import {
+  defineDomain, definePipeline,
+  state, edge, node, terminal,
+  createTracer,
+} from '@tde.io/plexis';
+
+const tracer = createTracer();
+
+const order = defineDomain('order', () => {
+  state('pending', { edges: { SUBMIT: edge({ target: 'processing' }) } });
+  state('processing', { terminal: true });
+  return { context: {}, initial: 'pending' } as const;
+}, { tracer });
+
+const payment = definePipeline('payment', () => {
+  node('validate', terminal());
+  return { initial: 'validate' };
+}, { tracer });
+```
+
+Both domain and pipeline write events to the same tracer instance.
+
+## Trace Levels
+
+Each event has a `level` identifying which subsystem emitted it:
+
+| Level | Emitted by |
+| --- | --- |
+| `'domain'` | `follow()` start/end |
+| `'state'` | State entry and exit |
+| `'edge'` | Edge selection and traversal |
+| `'pipeline'` | Pipeline `run()` start/end |
+| `'pipeline-node'` | Individual node execution |
+| `'fork'` | Fork condition evaluation and selection |
+| `'action'` | Edge or node action execution |
+| `'guard'` | Guard evaluation |
+| `'condition'` | Fork condition evaluation detail |
+
+## Subscribing to Events
+
+Subscribe to live trace events as they are recorded:
+
+```typescript
+const unsub = tracer.subscribe((event) => {
+  console.log(`[${event.level}] ${event.type} — ${event.status}`);
+});
+
+await order.follow('SUBMIT');
+
+unsub(); // stop listening
+```
+
+## Querying History
+
+```typescript
+// All recorded events
+const events = tracer.history();
+
+// All trace IDs (one per top-level domain.follow() or pipeline.run() call)
+const ids = tracer.traces();
+
+// Events for a specific trace
+const traceEvents = tracer.byTraceId(ids[0]);
+```
+
+## Exporting Traces
+
+```typescript
+// JSON — structured array of TraceEvent objects
+const json = tracer.export('json');
+
+// Text — human-readable flat list
+const text = tracer.export('text');
+
+// Tree — nested tree grouped by trace and parent IDs
+const tree = tracer.export('tree');
+```
+
+## TraceEvent Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Unique event ID |
+| `traceId` | string | Groups all events from one `follow()` or `run()` call |
+| `parentId` | string | Parent event ID for nested calls (optional) |
+| `timestamp` | number | Time the event was recorded |
+| `level` | `TraceLevel` | Which subsystem emitted this event |
+| `type` | string | Specific event type, e.g. `'follow:start'` |
+| `domainId` | string | Emitting domain (optional) |
+| `pipelineId` | string | Emitting pipeline (optional) |
+| `status` | string | `'started'`, `'completed'`, `'blocked'`, `'selected'`, `'skipped'`, or `'failed'` |
+| `contextSnapshot` | any | Context captured when `captureContext` is enabled |
+
+## Clearing History
+
+```typescript
+tracer.clear();
+```
+
+Removes all recorded events from memory. Does not affect active subscribers.

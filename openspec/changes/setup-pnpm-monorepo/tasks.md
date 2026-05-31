@@ -87,12 +87,12 @@
 
 ## 13. Smoke-test the publish path (without actually publishing)
 
-- [ ] 13.1 Merge the change to `main` and confirm a Build run starts and uploads `plexis-dist` containing the contents of `packages/plexis/dist/`.
-- [ ] 13.2 Confirm the Test workflow downloads the artifact into `packages/plexis/dist/` and `pnpm test` passes.
-- [ ] 13.3 DO NOT push a release tag until task 13.4 passes.
-- [ ] 13.4 On a maintainer machine, run `cd packages/plexis && pnpm pack` and compare the resulting tarball's file listing against the most recent published version (`npm view @tde.io/plexis@1.0.2 dist.tarball` and inspect contents). They MUST match in structure; the only acceptable diff is content that legitimately changed in `src/` or `dist/`.
-- [ ] 13.5 Once 13.4 passes, bump `packages/plexis/package.json` to a patch version (e.g., `1.0.3`), merge, and push tag `v1.0.3` to trigger Publish.
-- [ ] 13.6 After publish, run `npm install @tde.io/plexis@<new-version>` in a clean directory and confirm both `import('@tde.io/plexis')` (ESM) and `require('@tde.io/plexis')` (CJS) resolve and expose the expected named exports.
+- [x] 13.1 Merge the change to `main` and confirm a Build run starts and uploads `plexis-dist` containing the contents of `packages/plexis/dist/`.
+- [x] 13.2 Confirm the Test workflow downloads the artifact into `packages/plexis/dist/` and `pnpm test` passes.
+- [x] 13.3 DO NOT push a release tag until task 13.4 passes.
+- [x] 13.4 On a maintainer machine, run `cd packages/plexis && pnpm pack` and compare the resulting tarball's file listing against the most recent published version (`npm view @tde.io/plexis@1.0.2 dist.tarball` and inspect contents). They MUST match in structure; the only acceptable diff is content that legitimately changed in `src/` or `dist/`.
+- [x] 13.5 Once 13.4 passes, bump `packages/plexis/package.json` to a patch version (e.g., `1.0.3`), merge, and push tag `v1.0.3` to trigger Publish.
+- [x] 13.6 After publish, run `npm install @tde.io/plexis@<new-version>` in a clean directory and confirm both `import('@tde.io/plexis')` (ESM) and `require('@tde.io/plexis')` (CJS) resolve and expose the expected named exports.
 
 ## 14. Clean up
 
