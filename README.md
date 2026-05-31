@@ -78,13 +78,14 @@ apps/docs/         — reserved slot for the future documentation site (not yet 
 
 ## CI & Releasing
 
-Three GitHub Actions workflows form the delivery pipeline:
+Four GitHub Actions workflows form the delivery pipeline:
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| **Build** | push to `main`, tag `v*.*.*` | Typechecks, builds, uploads `dist/` as artifact `plexis-dist` |
-| **Test** | Build succeeds | Downloads `plexis-dist`, runs `pnpm test` against it |
-| **Publish** | tag `v*.*.*` | Waits for Build + Test to succeed, downloads `plexis-dist`, publishes to npm |
+| **Build** (`build` job) | pull request, tag `v*.*.*` | Typechecks, builds, uploads `dist/` as artifact `plexis-dist` |
+| **Build** (`test` job) | after `build` job succeeds | Downloads `plexis-dist`, runs `pnpm test` against it |
+| **Docs** | pull request | Builds the Astro docs site to catch MDX/build errors |
+| **Publish** | tag `v*.*.*` | Waits for Build to succeed (both jobs), downloads `plexis-dist`, publishes to npm |
 
 **To release a new version:**
 

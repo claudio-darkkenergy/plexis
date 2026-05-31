@@ -27,7 +27,7 @@ plexis/
   apps/
     docs/            ← @tde.io/docs — this Astro Starlight site
   .github/
-    workflows/       ← build.yml, test.yml, publish.yml, docs.yml
+    workflows/       ← build.yml, publish.yml, docs.yml, smoke-test.yml
 ```
 
 ## Running Tests
@@ -105,14 +105,15 @@ If the Vercel build fails but `pnpm docs:build` passes locally, check the Vercel
 
 ## CI Workflows
 
-| Workflow | Trigger | What it does |
+| Workflow / Job | Trigger | What it does |
 |---|---|---|
-| `build.yml` | Push to any branch, tag `v*.*.*` | Typechecks and builds the library |
-| `test.yml` | After `build.yml` succeeds | Runs the Vitest test suite |
-| `publish.yml` | Tag `v*.*.*` | Publishes `@tde.io/plexis` to npm with OIDC provenance |
-| `docs.yml` | Push to any branch | Builds the Astro docs site to catch MDX errors |
+| `build.yml` / `build` | Pull request, tag `v*.*.*` | Typechecks and builds the library; uploads `plexis-dist` artifact |
+| `build.yml` / `test` | After `build` job succeeds | Downloads `plexis-dist`, runs the Vitest test suite |
+| `docs.yml` | Pull request | Builds the Astro docs site to catch MDX errors |
+| `publish.yml` | Tag `v*.*.*` | Waits for `build.yml` to succeed (both jobs), publishes `@tde.io/plexis` to npm with OIDC provenance |
+| `smoke-test.yml` | After `publish.yml` succeeds | Installs the published package from npm and validates ESM/CJS exports |
 
-The `docs.yml` workflow is independent — it does not gate library CI and library CI does not gate it.
+CI runs only on pull requests (for development) and on `v*.*.*` tags (for releases). Plain branch pushes trigger no workflow runs.
 
 ## Releasing a New Version
 
@@ -122,12 +123,14 @@ The `docs.yml` workflow is independent — it does not gate library CI and libra
    cd packages/plexis && npm version patch --no-git-tag-version
    ```
 
-2. Commit and push to `main`.
+2. Open a PR, get it merged to `main`.
 
 3. Push a matching tag to trigger Publish:
 
    ```bash
    git tag v1.2.3 && git push origin v1.2.3
    ```
+
+   The tag push triggers `build.yml` (both `build` and `test` jobs), then `publish.yml` once both pass, then `smoke-test.yml` to validate the published package.
 
 The Publish workflow authenticates via GitHub OIDC — no `NPM_TOKEN` secret is needed.
