@@ -31,7 +31,8 @@
       "Bash(openspec --version)",
       "Bash(pnpm --filter @tde.io/docs build)",
       "Bash(grep -v \":0$\")",
-      "Bash(grep -rn \"node\\('.*', {\" /Users/claudionunezjr/Documents/Projects/plexis/apps/docs/src/content/docs/)"
+      "Bash(grep -rn \"node\\('.*', {\" /Users/claudionunezjr/Documents/Projects/plexis/apps/docs/src/content/docs/)",
+      "Bash(echo \"---exit:$?---\")"
     ]
   }
 }
