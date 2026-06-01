@@ -1,0 +1,116 @@
+---
+title: Guards vs Forks
+description: Know when to block a domain transition with a guard and when to route pipeline flow with a fork — two different tools for two different layers.
+---
+
+Guards and forks both involve a boolean condition, but they live at different layers and have different effects. A **guard** stops a domain transition; a **fork** routes a pipeline to a branch. Choosing the right one is mostly about which layer owns the decision.
+
+## Guards — blocking a domain transition
+
+A guard lives on an edge (`EdgeDef.guard`) and is evaluated before any side effects run. If it returns `false`, the event is blocked: no `onExit`, no action, no pipeline, no state change, no history entry. The domain stays exactly where it was.
+
+```typescript
+import { defineDomain, state, edge } from '@tde.io/plexis';
+
+type Ctx = { balance: number; amount: number };
+
+const account = defineDomain<Ctx>('account', () => {
+  state('open', {
+    edges: {
+      WITHDRAW: edge({
+        target: 'open',
+        // Guard: block the transition entirely if there are insufficient funds
+        guard: async (ctx) => ctx.balance >= ctx.amount,
+        action: async (ctx) => ({ balance: ctx.balance - ctx.amount }),
+      }),
+    },
+  });
+  return { context: { balance: 100, amount: 0 }, initial: 'open' };
+});
+
+const result = await account.follow('WITHDRAW');
+// result.status === 'blocked' — guard returned false, nothing ran
+```
+
+The `DomainFollowResult.status` will be `'blocked'` when a guard rejects the transition.
+
+## Forks — routing pipeline flow
+
+A fork lives on a pipeline node's `forks` array. Unlike a guard, forks do not block execution — they *route* it. The pipeline always continues; the fork decides which direction it takes.
+
+```typescript
+import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+
+type Ctx = { amount: number; fundsSufficient: boolean };
+
+const process = definePipeline<Ctx>('process', () => {
+  node('check-funds', {
+    action: async (ctx) => ({ fundsSufficient: ctx.amount <= 100 }),
+    forks: [
+      fork((ctx) => ctx.fundsSufficient,  'charge',  { label: 'ok' }),
+      fork((ctx) => !ctx.fundsSufficient, 'decline', { label: 'insufficient' }),
+    ],
+  });
+  node('charge',  terminal());
+  node('decline', terminal());
+  return { initial: 'check-funds' };
+});
+
+const result = await process.run({ amount: 150, fundsSufficient: false });
+// Pipeline always runs to a terminal — it routes to 'decline', not blocked
+// result.finalNode === 'decline'
+// result.status    === 'completed'
+```
+
+## Choosing between them
+
+| Situation | Use |
+|---|---|
+| Block a domain event before any side effects run | Guard |
+| Route a pipeline to a success or failure branch | Fork |
+| The decision is about "can this transition happen at all?" | Guard |
+| The decision is about "what should happen next in this workflow?" | Fork |
+| The entity stays in the same state when denied | Guard |
+| The workflow always ends at some terminal | Fork |
+
+**Guards protect domain integrity.** They are the right place for invariants that must hold before a state change is allowed — balance checks, role checks, status pre-conditions.
+
+**Forks encode workflow logic.** They are the right place for conditional routing that should be captured in the audit trail, traced, and part of the pipeline's declared graph.
+
+## Can I use both?
+
+Yes. A domain edge can have a `guard` *and* a `pipeline`. If the guard passes, the pipeline runs as part of the transition. Inside that pipeline, forks route the work.
+
+```typescript
+import { defineDomain, definePipeline, state, edge, node, fork, terminal } from '@tde.io/plexis';
+
+type Ctx = { balance: number; amount: number; charged: boolean };
+
+const charge = definePipeline<Ctx>('charge', () => {
+  node('attempt', {
+    action: async (ctx) => ({ charged: true }),
+    forks: [fork(undefined, 'done')],
+  });
+  node('done', terminal());
+  return { initial: 'attempt' };
+});
+
+const account = defineDomain<Ctx>('account', () => {
+  state('open', {
+    edges: {
+      WITHDRAW: edge({
+        target: 'open',
+        guard: async (ctx) => ctx.balance >= ctx.amount, // blocks if insufficient
+        pipeline: charge,                                 // runs if guard passes
+        action: async (ctx) => ({ balance: ctx.balance - ctx.amount }),
+      }),
+    },
+  });
+  return {
+    context: { balance: 100, amount: 50, charged: false },
+    initial: 'open',
+  };
+});
+```
+
+For full type signatures, see [EdgeDef in the Definition Functions reference](/reference/definition-functions) and [PipelineForkDef in the Registration Helpers reference](/reference/registration-helpers).

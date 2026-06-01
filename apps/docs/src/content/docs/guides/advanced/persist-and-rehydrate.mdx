@@ -1,0 +1,167 @@
+---
+title: Persist and Rehydrate
+description: Serialize a domain snapshot to an external store and restore it on a later serverless invocation — so stateless runtimes can carry durable domain state across requests.
+---
+
+A Plexis domain lives in memory. In a serverless or edge runtime, the process does not persist between requests — each invocation starts fresh. If your domain models state that spans multiple requests (a checkout flow, an approval workflow, a multi-step form), you need to serialize the domain after each transition and reconstruct it before the next one.
+
+This guide shows the full round-trip: snapshot → serialize → store → read → deserialize → restore.
+
+## The scenario: an order checkout spread across requests
+
+Each HTTP request handles one user action. The domain is created fresh per request, restored from the database, a transition is followed, and the updated snapshot is written back.
+
+```typescript
+import { defineDomain, state, edge } from '@tde.io/plexis';
+import type { DomainSnapshot } from '@tde.io/plexis';
+
+// ── 1. Define the domain ─────────────────────────────────────────────────────
+
+type CheckoutCtx = {
+  orderId: string;
+  items: string[];
+  shippingAddress: string | null;
+  paymentMethod: string | null;
+};
+
+function createCheckoutDomain() {
+  return defineDomain<CheckoutCtx>('checkout', () => {
+    state('cart', {
+      edges: {
+        SET_SHIPPING: edge({ target: 'address' }),
+      },
+    });
+    state('address', {
+      edges: {
+        SET_PAYMENT: edge({ target: 'payment' }),
+        BACK:        edge({ target: 'cart' }),
+      },
+    });
+    state('payment', {
+      edges: {
+        CONFIRM: edge({ target: 'confirmed' }),
+        BACK:    edge({ target: 'address' }),
+      },
+    });
+    state('confirmed', { terminal: true });
+
+    return {
+      context: {
+        orderId: '',
+        items: [],
+        shippingAddress: null,
+        paymentMethod: null,
+      },
+      initial: 'cart',
+    };
+  });
+}
+```
+
+## 2. Serialize and store a snapshot
+
+After each transition, call `domain.snapshot()` to get a plain `{ state, context, historyLength }` object. It is JSON-safe as long as the context contains only JSON-serializable values.
+
+```typescript
+// Simulated database client — replace with your actual store
+const db = {
+  async set(key: string, value: string) { /* write to KV/DB */ },
+  async get(key: string): Promise<string | null> { return null; },
+};
+
+async function saveCheckout(orderId: string, snap: DomainSnapshot<CheckoutCtx>) {
+  await db.set(`checkout:${orderId}`, JSON.stringify(snap));
+}
+```
+
+## 3. Load and restore a snapshot
+
+On a later request, read the serialized snapshot and call `domain.restore()` to put the domain back in the saved state.
+
+```typescript
+async function loadCheckout(orderId: string): Promise<DomainSnapshot<CheckoutCtx> | null> {
+  const raw = await db.get(`checkout:${orderId}`);
+  if (!raw) return null;
+  return JSON.parse(raw) as DomainSnapshot<CheckoutCtx>;
+}
+```
+
+## 4. Request handler — full round-trip
+
+Each request: create a fresh domain, restore if a prior snapshot exists, follow the event, save the updated snapshot.
+
+```typescript
+type Request = { orderId: string; event: string; payload?: unknown };
+type Response = { state: string; context: CheckoutCtx };
+
+async function handleCheckoutRequest(req: Request): Promise<Response> {
+  const domain = createCheckoutDomain();
+
+  // Restore from the last saved snapshot (or start fresh if none)
+  const saved = await loadCheckout(req.orderId);
+  if (saved) {
+    domain.restore(saved);
+  } else {
+    // First request — seed orderId into context
+    domain.restore({
+      state: 'cart',
+      context: { orderId: req.orderId, items: [], shippingAddress: null, paymentMethod: null },
+      historyLength: 0,
+    });
+  }
+
+  // Follow the event from the request
+  const result = await domain.follow(req.event as any, req.payload);
+
+  if (result.status !== 'followed') {
+    throw new Error(`Transition ${req.event} was ${result.status}`);
+  }
+
+  // Persist the updated snapshot
+  await saveCheckout(req.orderId, domain.snapshot());
+
+  return { state: domain.state, context: domain.context };
+}
+```
+
+## 5. Example request sequence
+
+```typescript
+// Request 1: Start the checkout (domain starts in 'cart', no prior snapshot)
+await handleCheckoutRequest({ orderId: 'ord_1', event: 'SET_SHIPPING' });
+// domain state: 'address', saved to DB
+
+// Request 2: On a different function instance — domain is reconstructed from DB
+await handleCheckoutRequest({ orderId: 'ord_1', event: 'SET_PAYMENT' });
+// domain restored to 'address', transitions to 'payment', saved to DB
+
+// Request 3: Confirm the order
+await handleCheckoutRequest({ orderId: 'ord_1', event: 'CONFIRM' });
+// domain restored to 'payment', transitions to 'confirmed', saved to DB
+```
+
+Each request creates a new domain instance. The domain object never crosses request boundaries — only the serialized snapshot does.
+
+## What is and is not in the snapshot
+
+`DomainSnapshot` contains:
+
+- `state` — the current state name (a string).
+- `context` — a copy of the context object. Must be JSON-serializable.
+- `historyLength` — the count of completed transitions.
+
+**Not in the snapshot:** handler functions (`onEnter`, `onExit`, `action`, `guard`), active subscribers, and full history entries. These are part of the definition or the live runtime, not the serialized state.
+
+## Version skew
+
+If the domain definition changes between the time a snapshot was saved and the time it is restored, the restoration may fail or produce unexpected behavior:
+
+- A renamed state will cause `restore()` to throw `PlexisError` if the stored state name no longer exists.
+- Added context fields will be absent in old snapshots (provide defaults in `createCheckoutDomain` if needed).
+- Removed context fields will silently remain in restored context.
+
+Version your snapshots and write migration functions for breaking definition changes. See [Snapshots and Restore](/patterns/snapshots-and-restore) in Patterns for the mechanics.
+
+## Using a domain factory for clean per-request construction
+
+The `createCheckoutDomain` factory pattern (from this guide) is described in detail in [Reusable Factories](/patterns/reusable-factories). It keeps the definition clean and makes per-request construction trivial.

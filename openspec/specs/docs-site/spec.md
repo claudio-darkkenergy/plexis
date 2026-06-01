@@ -28,12 +28,17 @@ The repository SHALL contain a documentation site package at `apps/docs/`. This 
 
 ### Requirement: Starlight site has a complete content structure
 
-The docs site SHALL contain MDX content files covering at minimum: a landing/quick-start page, a Domain guide, a Pipeline guide, a multi-page API reference section, and a Contributor guide. Content MUST be authored in MDX under `src/content/docs/` following Starlight's content collections convention.
+The docs site SHALL contain MDX content files covering at minimum: a landing/quick-start page, a Concepts section, a Domain guide, a Pipeline guide, a Patterns section, an Advanced section, an Integrations section, a multi-page API reference section, and a Contributor guide. Content MUST be authored in MDX under `src/content/docs/` following Starlight's content collections convention.
 
 #### Scenario: Landing page exists
 
 - **WHEN** a visitor navigates to the docs site root
 - **THEN** a page renders with the Plexis one-line description and a Quick Start section
+
+#### Scenario: Concepts section exists
+
+- **WHEN** a visitor navigates to the Concepts section
+- **THEN** pages render explaining the cross-cutting mental models (two-layer model, context & patches, execution & lifecycle, definition lifecycle)
 
 #### Scenario: Domain guide exists
 
@@ -44,6 +49,21 @@ The docs site SHALL contain MDX content files covering at minimum: a landing/qui
 
 - **WHEN** a visitor navigates to the Pipeline guide
 - **THEN** a page renders explaining the Pipeline concept, nodes, forks, and terminal nodes with code examples
+
+#### Scenario: Patterns section exists
+
+- **WHEN** a visitor navigates to the Patterns section
+- **THEN** pages render covering focused framework-agnostic techniques (e.g., custom merge, composing pipelines, forks in depth, testing)
+
+#### Scenario: Advanced section exists
+
+- **WHEN** a visitor navigates to the Advanced section
+- **THEN** pages render presenting heavyweight, multi-primitive worked examples (e.g., multi-step form, API route, saga)
+
+#### Scenario: Integrations section exists
+
+- **WHEN** a visitor navigates to the Integrations section
+- **THEN** pages render binding Plexis to named third-party targets (React, Vue)
 
 #### Scenario: API reference section exists
 
@@ -59,7 +79,12 @@ The docs site SHALL contain MDX content files covering at minimum: a landing/qui
 
 ### Requirement: Starlight sidebar navigation is configured
 
-The Starlight site SHALL declare an explicit sidebar configuration in `astro.config.mjs` that groups pages into logical sections: Guides, Reference, and Contributing. The Reference section MUST be a group enumerating each per-section reference page in an intentional (non-alphabetical) order rather than a single API link.
+The Starlight site SHALL declare an explicit sidebar configuration in `astro.config.mjs` that groups pages into logical sections in reading order: Concepts, Guides, Patterns, Advanced, Integrations, Reference, and Contributing. The Reference section MUST be a group enumerating each per-section reference page in an intentional (non-alphabetical) order rather than a single API link.
+
+#### Scenario: Sidebar renders the five learning buckets in order
+
+- **WHEN** a developer reads the `sidebar` array in `apps/docs/astro.config.mjs`
+- **THEN** groups labeled `Concepts`, `Guides`, `Patterns`, `Advanced`, and `Integrations` appear in that relative order, before the `Reference` group
 
 #### Scenario: Sidebar renders guide pages
 

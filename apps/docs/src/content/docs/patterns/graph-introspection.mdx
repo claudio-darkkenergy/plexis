@@ -1,0 +1,112 @@
+---
+title: Graph Introspection
+description: Read domain.graph and pipeline.graph to get a static GraphDescriptor and run path queries — without rendering a diagram.
+---
+
+`domain.graph` and `pipeline.graph` expose the static structure of your state machine as a `GraphDescriptor` object. Use it to inspect nodes and edges, run path queries, or feed a visualizer. This page covers reading the graph; rendering it as Mermaid or DOT is in [State Graph Visualizer](/guides/advanced/state-graph-visualizer).
+
+## Reading the graph descriptor
+
+```typescript
+import { defineDomain, state, edge } from '@tde.io/plexis';
+
+const order = defineDomain('order', () => {
+  state('pending',    { edges: { SUBMIT: edge({ target: 'processing' }) } });
+  state('processing', { edges: { FULFILL: edge({ target: 'fulfilled' }) } });
+  state('fulfilled',  { terminal: true });
+  return { context: {}, initial: 'pending' };
+});
+
+const descriptor = order.graph.describe();
+// {
+//   id: 'order',
+//   kind: 'domain',
+//   nodes: [...],
+//   edges: [...],
+//   entryNodes: [{ kind: 'domain-state', nodeId: 'pending', ... }],
+//   terminalNodes: [{ kind: 'domain-state', nodeId: 'fulfilled', ... }],
+//   attachments: []
+// }
+
+console.log(descriptor.nodes.map((n) => n.id));
+// ['pending', 'processing', 'fulfilled']
+
+console.log(descriptor.edges.map((e) => `${e.from.nodeId} --${e.event}--> ${e.to.nodeId}`));
+// ['pending --SUBMIT--> processing', 'processing --FULFILL--> fulfilled']
+```
+
+## Inspecting individual nodes
+
+`domain.graph.node(id)` returns the `GraphNode` for a named state or pipeline node.
+
+```typescript
+const node = order.graph.node('processing');
+// { ref: { kind: 'domain-state', nodeId: 'processing' }, id: 'processing', terminal: false }
+```
+
+`domain.graph.inbound(id)` and `domain.graph.outbound(id)` return the edges that arrive at or depart from a node:
+
+```typescript
+const inbound  = order.graph.inbound('processing');
+// edges where to.nodeId === 'processing' → [the SUBMIT edge]
+
+const outbound = order.graph.outbound('processing');
+// edges where from.nodeId === 'processing' → [the FULFILL edge]
+```
+
+## Path queries
+
+Path queries traverse the graph to find routes between two nodes.
+
+```typescript
+// All paths from 'pending' to 'fulfilled'
+const paths = order.graph.pathsFrom('pending');
+paths.forEach((p) => {
+  console.log(p.nodes.map((r) => r.nodeId).join(' → '));
+});
+// 'pending → processing → fulfilled'
+
+// Nodes reachable from 'pending'
+const reachable = order.graph.reachableFrom('pending');
+console.log(reachable.map((n) => n.id));
+// ['pending', 'processing', 'fulfilled']
+```
+
+`pathsTo(id)` gives paths that end at the given node; `pathsFrom(id)` gives paths that start there. Both accept a `PathQueryOptions` object to control `maxDepth`, cycle handling, and direction.
+
+## Pipeline graphs
+
+Pipelines have the same graph API under `pipeline.graph`:
+
+```typescript
+import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+
+const process = definePipeline('process', () => {
+  node('validate', {
+    forks: [
+      fork((ctx) => true,  'accept', { label: 'ok' }),
+      fork((ctx) => false, 'reject', { label: 'fail' }),
+    ],
+  });
+  node('accept', terminal());
+  node('reject', terminal());
+  return { initial: 'validate' };
+});
+
+const g = process.graph.describe();
+console.log(g.terminalNodes.map((n) => n.nodeId));
+// ['accept', 'reject']
+```
+
+## Observing runtime-traversed paths
+
+`domain.graph` also exposes `observedPathsTo(id)` and `observedPathsFrom(id)`, which return only paths the domain has actually traversed at runtime (based on the tracer). These are useful for coverage analysis and debugging.
+
+```typescript
+await order.follow('SUBMIT');
+
+const observed = order.graph.observedPathsFrom('pending');
+// returns the actual path taken so far
+```
+
+For the full `DomainGraph` and `PipelineGraph` types, see the [Domain Instance reference](/reference/domain) and [Pipeline Instance reference](/reference/pipeline). To render a `GraphDescriptor` as a diagram, see [State Graph Visualizer](/guides/advanced/state-graph-visualizer).

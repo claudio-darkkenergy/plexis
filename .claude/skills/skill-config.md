@@ -87,6 +87,48 @@ dist/                           # Build output (gitignored)
 
 ---
 
+## Docs Site Structure (`apps/docs/`)
+
+The docs site is an **Astro + Starlight** app at `apps/docs/`. Content lives under `apps/docs/src/content/docs/` in five learning buckets plus Reference and Contributing. The sidebar in `apps/docs/astro.config.mjs` renders them in reading order.
+
+### Content buckets
+
+| Bucket | Path | What lives here |
+|---|---|---|
+| Concepts | `concepts/` | Cross-cutting mental models — the "why", no step-by-step how-to |
+| Guides | `guides/` | Per-primitive walkthroughs (domain, pipeline, tracer, error-handling) |
+| Patterns | `patterns/` | Single framework-agnostic technique pages |
+| Advanced | `guides/advanced/` | Heavyweight multi-primitive worked examples; framework-neutral only |
+| Integrations | `guides/integrations/` | Guides scoped to a named third-party target (React, Vue) |
+| Reference | `reference/` | API reference pages |
+| Contributing | `contributing/` | Contributor guide |
+
+### Sidebar order (enforced by specs)
+
+`Concepts → Guides → Patterns → Advanced → Integrations → Reference → Contributing`
+
+### Content files
+
+**Concepts (4):** `concepts/two-layer-model.mdx`, `concepts/context-and-patches.mdx`, `concepts/execution-and-lifecycle.mdx`, `concepts/definition-lifecycle.mdx`
+
+**Patterns (11):** `patterns/custom-merge.mdx`, `patterns/composing-pipelines.mdx`, `patterns/forks-in-depth.mdx`, `patterns/guards-vs-forks.mdx`, `patterns/designing-the-state-graph.mdx`, `patterns/snapshots-and-restore.mdx`, `patterns/type-safe-domains.mdx`, `patterns/testing.mdx`, `patterns/graph-introspection.mdx`, `patterns/reactive-subscriptions.mdx`, `patterns/reusable-factories.mdx`
+
+**Advanced (5):** `guides/advanced/api-route.mdx`, `guides/advanced/multi-step-form.mdx`, `guides/advanced/saga.mdx`, `guides/advanced/persist-and-rehydrate.mdx`, `guides/advanced/state-graph-visualizer.mdx`
+
+**Integrations (2):** `guides/integrations/react.mdx`, `guides/integrations/vue.mdx`
+
+### Authoring conventions
+
+- Every MDX file requires Starlight frontmatter: `title` and `description`.
+- All fenced code blocks must use a long-form language identifier: only `typescript` or `bash`.
+- Examples must import from `@tde.io/plexis` and use only symbols exported from `packages/plexis/src/types.ts`.
+- Concepts defer signatures/mechanics to Reference or Pattern links.
+- Patterns are self-contained (no cross-page setup dependencies) and open with a runnable example.
+- Advanced pages are self-contained worked examples whose hero is a scenario to build.
+- Integrations are scoped to a named third-party target (not runtime properties like "serverless").
+
+---
+
 ## Test Conventions
 
 - Test runner: **Vitest** with `@vitest/coverage-v8`; config in `vitest.config.ts`.
