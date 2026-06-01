@@ -10,13 +10,18 @@ If you are new to reading the graph API, start with [Graph Introspection](/patte
 ## Reading the descriptor
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
-  state('pending',    { edges: { SUBMIT: edge({ target: 'processing' }) } });
-  state('processing', { edges: { FULFILL: edge({ target: 'fulfilled' }), CANCEL: edge({ target: 'cancelled' }) } });
-  state('fulfilled',  { terminal: true });
-  state('cancelled',  { terminal: true });
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
+  });
+  when('processing', () => {
+    on('FULFILL', { target: 'fulfilled' });
+    on('CANCEL', { target: 'cancelled' });
+  });
+  when('fulfilled', terminal());
+  when('cancelled', terminal());
   return { context: {}, initial: 'pending' };
 });
 
@@ -127,14 +132,12 @@ const dot = toDot(descriptor);
 The same functions work for `pipeline.graph.describe()` — `descriptor.kind` will be `'pipeline'` and nodes will have `kind: 'pipeline-node'`. Fork edges have `kind: 'pipeline-fork'` and carry the fork label.
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 const charge = definePipeline('charge', () => {
-  node('validate', {
-    forks: [
-      fork((ctx) => true,  'charge',  { label: 'valid' }),
-      fork((ctx) => false, 'decline', { label: 'invalid' }),
-    ],
+  node('validate', () => {
+    fork((ctx);
+    fork((ctx);
   });
   node('charge',  terminal());
   node('decline', terminal());
@@ -146,7 +149,7 @@ const pipelineDot = toDot(charge.graph.describe());
 
 ## Filtering edge kinds
 
-The `GraphDescriptor` may include edges of various kinds (`'domain-edge'`, `'state-entry-pipeline'`, `'pipeline-fork'`, etc.). Filter to only the edges you want to render:
+The `GraphDescriptor` may include edges of various kinds (`'domain-flow'`, `'state-entry-pipeline'`, `'pipeline-fork'`, etc.). Filter to only the edges you want to render:
 
 ```typescript
 function toMermaidSimple(descriptor: GraphDescriptor): string {
@@ -157,7 +160,7 @@ function toMermaidSimple(descriptor: GraphDescriptor): string {
   }
 
   // Only render the primary transition edges
-  for (const edge of descriptor.edges.filter((e) => e.kind === 'domain-edge' || e.kind === 'pipeline-fork')) {
+  for (const edge of descriptor.edges.filter((e) => e.kind === 'domain-flow' || e.kind === 'pipeline-fork')) {
     const from  = edge.from.nodeId ?? '?';
     const to    = edge.to.nodeId   ?? '?';
     const label = edge.event ?? edge.label ?? '';

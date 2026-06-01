@@ -3,23 +3,21 @@ title: Definition Lifecycle
 description: Learn how defineDomain and definePipeline setup functions run synchronously, what a builder scope is, and what happens when you call a registration helper outside one.
 ---
 
-Defining a domain or pipeline in Plexis has one rule: the setup function runs *synchronously*, right now, when you call `defineDomain` or `definePipeline`. Registration helpers — `state`, `edge`, `node`, `fork`, `terminal` — only work inside that synchronous call.
+Defining a domain or pipeline in Plexis has one rule: the setup function runs *synchronously*, right now, when you call `defineDomain` or `definePipeline`. Registration helpers — `when`, `on`, `enter`, `exit`, `node`, `action`, `fork`, `terminal` — only work inside that synchronous call.
 
 ## The setup function runs at definition time
 
-When you call `defineDomain(id, setup)`, the runtime immediately calls `setup()`. Whatever `state()` and `edge()` registrations happen inside that call are captured. When `setup()` returns, the builder closes. The domain or pipeline object is fully constructed before execution continues.
+When you call `defineDomain(id, setup)`, the runtime immediately calls `setup()`. Whatever `when()` and `on()` registrations happen inside that call are captured. When `setup()` returns, the builder closes. The domain or pipeline object is fully constructed before execution continues.
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 // setup() runs here, synchronously
 const order = defineDomain('order', () => {
-  state('pending', {
-    edges: {
-      SUBMIT: edge({ target: 'processing' }),
-    },
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
   });
-  state('processing', { terminal: true });
+  when('processing', terminal());
 
   // Return the initial config — must be sync
   return { context: { orderId: '' }, initial: 'pending' };
@@ -31,27 +29,34 @@ console.log(order.state); // 'pending'
 
 ## Builder scope
 
-`defineDomain` and `definePipeline` each open a **builder scope** before calling `setup()` and close it after. The registration helpers — `state`, `node`, `fork` — write into the active scope. Only one scope can be active per type at a time.
+`defineDomain` and `definePipeline` each open a **builder scope** before calling `setup()` and close it after. The registration helpers — `when`, `node`, `fork` — write into the active scope. Each `when(id, fn)` call opens a nested scope that `on`, `enter`, and `exit` write into.
 
 This is why helpers called outside a setup function throw:
 
 ```typescript
-import { state } from '@tde.io/plexis';
+import { when } from '@tde.io/plexis';
 
 // No active builder scope — this throws
-state('pending', { edges: {} });
+when('pending', () => {});
 // PlexisError: code 'BUILDER_CLOSED'
-// "state() called outside an active defineDomain scope"
+// "when() called outside an active defineDomain scope"
 ```
 
-The same applies to `node()` and `fork()` called outside `definePipeline`:
+The same applies to `node()` called outside `definePipeline`, and `on()`/`enter()`/`exit()` called outside a `when()` setup:
 
 ```typescript
-import { node, terminal } from '@tde.io/plexis';
+import { node, terminal, on } from '@tde.io/plexis';
 
 // Called at module scope — no active builder
 node('validate', terminal());
 // PlexisError: code 'BUILDER_CLOSED'
+
+// Called in defineDomain body but outside a when() setup
+import { defineDomain, on } from '@tde.io/plexis';
+defineDomain('d', () => {
+  on('SUBMIT', { target: 'x' }); // throws — must be inside when()
+  return { context: {}, initial: 'x' };
+});
 ```
 
 ## Why synchronous setup
@@ -60,7 +65,7 @@ Async setup would mean the domain could be used before it is ready. Synchronous 
 
 ```typescript
 // Safe at module scope — fully ready immediately
-import { defineDomain, definePipeline, state, edge, node, fork, terminal } from '@tde.io/plexis';
+import { defineDomain, definePipeline, when, on, node, fork, terminal } from '@tde.io/plexis';
 
 const notifyUser = definePipeline('notify-user', () => {
   node('send', terminal());
@@ -68,12 +73,10 @@ const notifyUser = definePipeline('notify-user', () => {
 });
 
 const signup = defineDomain('signup', () => {
-  state('new', {
-    edges: {
-      ACTIVATE: edge({ target: 'active', pipeline: notifyUser }),
-    },
+  when('new', () => {
+    on('ACTIVATE', { target: 'active', pipeline: notifyUser });
   });
-  state('active', { terminal: true });
+  when('active', terminal());
   return { context: {}, initial: 'new' };
 });
 ```
@@ -82,8 +85,8 @@ const signup = defineDomain('signup', () => {
 
 If a registration helper is called after its enclosing `defineDomain`/`definePipeline` has returned, the runtime throws `PlexisError` with code `BUILDER_CLOSED`. Common causes:
 
-- Calling `state()` or `node()` in a timer callback or promise inside the setup function.
-- Storing a reference to `state` or `node` and calling it later.
+- Calling `when()` or `node()` in a timer callback or promise inside the setup function.
+- Calling `on()`/`enter()`/`exit()` outside a `when()` setup, or `action()`/`fork()` outside a `node()` setup.
 - Nested async inside setup (setup must be synchronous; async helpers are not supported at registration time).
 
 The error is intentional: it prevents silent misconfiguration where a registration looks like it succeeded but was ignored because the scope was gone.

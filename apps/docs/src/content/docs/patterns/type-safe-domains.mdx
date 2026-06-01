@@ -8,15 +8,13 @@ By default, `domain.follow()` and `domain.can()` accept any `string` as the even
 ## The default: `follow()` accepts any string
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
-  state('pending', {
-    edges: {
-      SUBMIT: edge({ target: 'processing' }),
-    },
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
   });
-  state('processing', { terminal: true });
+  when('processing', terminal());
   return { context: {}, initial: 'pending' };
 });
 
@@ -29,23 +27,19 @@ The domain will return `status: 'ignored'` at runtime, but TypeScript won't catc
 ## Adding `as const` for typed events
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
-  state('pending', {
-    edges: {
-      SUBMIT: edge({ target: 'processing' }),
-      CANCEL: edge({ target: 'cancelled' }),
-    },
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
+    on('CANCEL', { target: 'cancelled' });
   });
-  state('processing', {
-    edges: {
-      FULFILL: edge({ target: 'fulfilled' }),
-      CANCEL:  edge({ target: 'cancelled' }),
-    },
+  when('processing', () => {
+    on('FULFILL', { target: 'fulfilled' });
+    on('CANCEL', { target: 'cancelled' });
   });
-  state('fulfilled', { terminal: true });
-  state('cancelled', { terminal: true });
+  when('fulfilled', terminal());
+  when('cancelled', terminal());
 
   return { context: {}, initial: 'pending' } as const;
   //                                          ^^^^^^^^
@@ -85,20 +79,16 @@ type OrderEvent = 'SUBMIT' | 'CANCEL' | 'FULFILL';
 
 const order = defineDomain<OrderCtx, OrderEvent>('order', () => {
   // TypeScript will error if you declare an edge that is not in OrderEvent
-  state('pending', {
-    edges: {
-      SUBMIT: edge({ target: 'processing' }),
-      CANCEL: edge({ target: 'cancelled' }),
-    },
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
+    on('CANCEL', { target: 'cancelled' });
   });
-  state('processing', {
-    edges: {
-      FULFILL: edge({ target: 'fulfilled' }),
-      CANCEL:  edge({ target: 'cancelled' }),
-    },
+  when('processing', () => {
+    on('FULFILL', { target: 'fulfilled' });
+    on('CANCEL', { target: 'cancelled' });
   });
-  state('fulfilled', { terminal: true });
-  state('cancelled', { terminal: true });
+  when('fulfilled', terminal());
+  when('cancelled', terminal());
   return { context: { orderId: '' }, initial: 'pending' };
 });
 ```

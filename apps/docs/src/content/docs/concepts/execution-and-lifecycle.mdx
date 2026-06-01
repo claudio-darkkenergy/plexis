@@ -9,48 +9,45 @@ When code calls `domain.follow()` or `pipeline.run()`, the runtime follows a det
 
 Every call to `domain.follow(event, payload)` runs these steps in sequence:
 
-1. **Guard check** — if the edge has a `guard` function, it is evaluated first. If it returns `false`, the follow is blocked immediately; no context changes, no side effects.
-2. **`onExit`** — the current state's `onExit` hook runs. The patch it returns is merged into context.
-3. **Edge action** — the edge's `action` runs. Its patch is merged into context.
-4. **Edge pipeline** — if the edge has a `pipeline`, it runs now against the updated context. Its final context becomes the new context.
+1. **Guard check** — if the flow has a `guard` function, it is evaluated first. If it returns `false`, the follow is blocked immediately; no context changes, no side effects.
+2. **`exit`** — the current state's `exit` hook runs. The patch it returns is merged into context.
+3. **Flow action** — the flow's `action` (registered via `on(event, { action })`) runs. Its patch is merged into context.
+4. **Flow pipeline** — if the flow has a `pipeline`, it runs now against the updated context. Its final context becomes the new context.
 5. **State transitions** — the domain moves to the target state.
-6. **`onEnter`** — the new state's `onEnter` hook runs. Its patch is merged into context.
+6. **`enter`** — the new state's `enter` hook runs. Its patch is merged into context.
 7. **State entry pipeline** — if the new state has a `pipeline`, it runs against the updated context.
 8. **History and subscribers** — the transition is recorded in history, and all `subscribe` listeners are called with the new snapshot.
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, enter, exit, on } from '@tde.io/plexis';
 
 const workflow = defineDomain('workflow', () => {
-  state('draft', {
-    onExit: async (ctx) => {
+  when('draft', () => {
+    exit(async (ctx) => {
       // Step 2 — runs when leaving 'draft'
       return { leftAt: 'draft' };
-    },
-    edges: {
-      SUBMIT: edge({
-        target: 'review',
-        action: async (ctx) => {
-          // Step 3 — ctx now has leftAt from onExit
-          return { submittedBy: 'user_1' };
-        },
-      }),
-    },
+    });
+    on('SUBMIT', {
+      target: 'review',
+      action: async (ctx) => {
+        // Step 3 — ctx now has leftAt from exit
+        return { submittedBy: 'user_1' };
+      },
+    });
   });
 
-  state('review', {
-    onEnter: async (ctx) => {
+  when('review', () => {
+    enter(async (ctx) => {
       // Step 6 — ctx now has leftAt and submittedBy
       return { enteredReviewAt: Date.now() };
-    },
-    edges: {},
+    });
   });
 
   return { context: {}, initial: 'draft' };
 });
 ```
 
-**Where side effects belong:** use `onEnter`/`onExit` for state-scoped side effects (logging, metrics) and edge actions for transition-scoped ones (validation, API calls triggered by a specific event). Subscribers (step 8) are ideal for reacting to the completed transition from outside the domain.
+**Where side effects belong:** use `enter`/`exit` for state-scoped side effects (logging, metrics) and flow actions for transition-scoped ones (validation, API calls triggered by a specific event). Subscribers (step 8) are ideal for reacting to the completed transition from outside the domain.
 
 ## Pipeline: the run loop
 
@@ -58,21 +55,19 @@ Every call to `pipeline.run(context, input?)` follows this loop:
 
 1. **Start at `initial`** — execution begins at the node named in the setup return value.
 2. **Run node action** — the node's `action` runs. Its patch is merged into context.
-3. **Evaluate forks** — the `forks` array is checked in order. The **first fork whose `condition` returns `true`** wins.
+3. **Evaluate forks** — forks are checked in declaration order. The **first fork whose `condition` returns `true`** wins.
 4. **Follow fork target** — execution moves to the fork target (a node ID string or a sub-Pipeline).
 5. **Repeat** — steps 2–4 repeat until a terminal node or no matching fork.
 6. **Return `PipelineRunResult`** — status is `'completed'` if a terminal was reached, `'stopped'` if no fork matched.
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 const process = definePipeline('process', () => {
-  node('validate', {
-    action: async (ctx) => ({ validated: true }),
-    forks: [
-      fork((ctx) => ctx.validated && ctx.amount > 0, 'charge', { label: 'valid' }),
-      fork((ctx) => !ctx.validated || ctx.amount <= 0, 'reject', { label: 'invalid' }),
-    ],
+  node('validate', () => {
+    action(async (ctx) => ({ validated: true }));
+    fork((ctx) => ctx.validated && ctx.amount > 0, 'charge', { label: 'valid' });
+    fork((ctx) => !ctx.validated || ctx.amount <= 0, 'reject', { label: 'invalid' });
   });
   node('charge',  terminal());
   node('reject',  terminal());

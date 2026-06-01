@@ -7,23 +7,21 @@ A domain's state graph is declared in the setup function. Getting the structure 
 
 ## Choosing `initial`
 
-The `initial` field in the setup return value names the state the domain starts in when first created. It must match a state you registered with `state()`.
+The `initial` field in the setup return value names the state the domain starts in when first created. It must match a state you registered with `when()`.
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const subscription = defineDomain('subscription', () => {
-  state('trial', {
-    edges: {
-      ACTIVATE: edge({ target: 'active' }),
-      EXPIRE:   edge({ target: 'expired' }),
-    },
+  when('trial', () => {
+    on('ACTIVATE', { target: 'active' });
+    on('EXPIRE', { target: 'expired' });
   });
-  state('active', {
-    edges: { CANCEL: edge({ target: 'cancelled' }) },
+  when('active', () => {
+    on('CANCEL', { target: 'cancelled' });
   });
-  state('expired',   { terminal: true });
-  state('cancelled', { terminal: true });
+  when('expired', terminal());
+  when('cancelled', terminal());
 
   // 'trial' is the starting point — must be a registered state
   return { context: {}, initial: 'trial' };
@@ -39,8 +37,8 @@ If `initial` names a state that was not registered, the runtime throws `PlexisEr
 A terminal state is one the domain can enter but never leave. Declare it with `terminal: true`. The domain will not follow any event while in a terminal state (following returns `status: 'ignored'`).
 
 ```typescript
-state('fulfilled', { terminal: true });  // no edges needed
-state('cancelled', { terminal: true });  // same
+when('fulfilled', terminal());  // no edges needed
+when('cancelled', terminal());  // same
 ```
 
 Terminal states do not need an `edges` object. Including edges on a terminal state is allowed but they will never be followed.
@@ -51,10 +49,12 @@ An unreachable state is one that no edge points to and that is not the `initial`
 
 ```typescript
 const broken = defineDomain('broken', () => {
-  state('active',  { edges: { DONE: edge({ target: 'done' }) } });
-  state('done',    { terminal: true });
+  when('active', () => {
+    on('DONE', { target: 'done' });
+  });
+  when('done', terminal());
   // Nobody transitions to 'orphan' — it is unreachable
-  state('orphan',  { terminal: true });
+  when('orphan', terminal());
   return { context: {}, initial: 'active' };
 });
 ```
@@ -67,12 +67,12 @@ Set `strict: true` in the setup return value to turn graph integrity problems in
 
 ```typescript
 const order = defineDomain('order', () => {
-  state('pending', {
-    edges: { SUBMIT: edge({ target: 'processing' }) },
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
   });
-  state('processing', { terminal: true });
+  when('processing', terminal());
   // 'ghost' is unreachable
-  state('ghost', { terminal: true });
+  when('ghost', terminal());
 
   return { context: {}, initial: 'pending', strict: true };
   // Throws PlexisError at creation: UNREACHABLE_STATE 'ghost'

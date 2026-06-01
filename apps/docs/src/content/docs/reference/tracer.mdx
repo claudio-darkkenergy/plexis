@@ -46,13 +46,15 @@ Tracer configuration:
 ### Example
 
 ```typescript
-import { createTracer, defineDomain, state, edge } from '@tde.io/plexis';
+import { createTracer, defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const tracer = createTracer({ captureContext: 'after', maxEvents: 500 });
 
 const order = defineDomain('order', () => {
-  state('pending', { edges: { SUBMIT: edge({ target: 'processing' }) } });
-  state('processing', { terminal: true });
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
+  });
+  when('processing', terminal());
   return { context: {}, initial: 'pending' };
 }, { tracer });
 

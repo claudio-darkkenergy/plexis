@@ -8,12 +8,16 @@ description: Read domain.graph and pipeline.graph to get a static GraphDescripto
 ## Reading the graph descriptor
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
-  state('pending',    { edges: { SUBMIT: edge({ target: 'processing' }) } });
-  state('processing', { edges: { FULFILL: edge({ target: 'fulfilled' }) } });
-  state('fulfilled',  { terminal: true });
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
+  });
+  when('processing', () => {
+    on('FULFILL', { target: 'fulfilled' });
+  });
+  when('fulfilled', terminal());
   return { context: {}, initial: 'pending' };
 });
 
@@ -79,14 +83,12 @@ console.log(reachable.map((n) => n.id));
 Pipelines have the same graph API under `pipeline.graph`:
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 const process = definePipeline('process', () => {
-  node('validate', {
-    forks: [
-      fork((ctx) => true,  'accept', { label: 'ok' }),
-      fork((ctx) => false, 'reject', { label: 'fail' }),
-    ],
+  node('validate', () => {
+    fork((ctx);
+    fork((ctx);
   });
   node('accept', terminal());
   node('reject', terminal());

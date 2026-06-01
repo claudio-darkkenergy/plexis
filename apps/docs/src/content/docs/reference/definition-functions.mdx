@@ -7,7 +7,7 @@ These functions create `Domain` and `Pipeline` instances from a synchronous setu
 
 ## `defineDomain(id, setup, options?)`
 
-Creates and returns a `Domain` instance. The setup function runs synchronously; `state()` registrations are collected and used to build the domain.
+Creates and returns a `Domain` instance. The setup function runs synchronously; `when()` and `on()` registrations are collected and used to build the domain.
 
 ```typescript
 function defineDomain<TContext, TEdges>(
@@ -25,7 +25,7 @@ Unique domain identifier.
 
 **`setup`** `() => DomainSetupResult<TContext>`
 
-Synchronous setup function. `state()` calls inside register states. Must return a `DomainSetupResult`:
+Synchronous setup function. `when()` calls inside register states. Must return a `DomainSetupResult`:
 
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -50,22 +50,18 @@ Additional configuration:
 ### Example
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 type OrderContext = { orderId: string | null; total: number };
 
 const order = defineDomain<OrderContext>('order', () => {
-  state('pending', {
-    edges: {
-      SUBMIT: edge({ target: 'processing' }),
-    },
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
   });
-  state('processing', {
-    edges: {
-      FULFILL: edge({ target: 'fulfilled' }),
-    },
+  when('processing', () => {
+    on('FULFILL', { target: 'fulfilled' });
   });
-  state('fulfilled', { terminal: true });
+  when('fulfilled', terminal());
 
   return { context: { orderId: null, total: 0 }, initial: 'pending' };
 });
@@ -116,19 +112,17 @@ Additional configuration:
 ### Example
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 type PaymentContext = { cardValid: boolean; charged: boolean };
 
 const payment = definePipeline<PaymentContext>('payment', () => {
-  node('validate', {
-    action: async (ctx) => ({ cardValid: ctx.cardValid }),
-    forks: [
-      fork((ctx) => ctx.cardValid, 'charge'),
-      fork((ctx) => !ctx.cardValid, 'decline'),
-    ],
+  node('validate', () => {
+    action(async (ctx) => ({ cardValid: ctx.cardValid }));
+    fork((ctx) => ctx.cardValid, 'charge');
+    fork((ctx) => !ctx.cardValid, 'decline');
   });
-  node('charge', terminal({ action: async () => ({ charged: true }) }));
+  node('charge', terminal(async () => ({ charged: true })));
   node('decline', terminal());
   return { initial: 'validate' };
 });
@@ -142,7 +136,7 @@ Passed as the third argument to a custom `merge` function. Describes the executi
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `phase` | `string` | Yes | Execution phase (e.g. `'edge-action'`, `'node-action'`, `'on-enter'`) |
+| `phase` | `string` | Yes | Execution phase (e.g. `'flow-action'`, `'pipeline-action'`, `'enter'`) |
 | `domainId` | `string` | No | ID of the enclosing domain, when in a domain context |
 | `pipelineId` | `string` | No | ID of the enclosing pipeline, when in a pipeline context |
 | `nodeId` | `string` | No | ID of the current pipeline node |

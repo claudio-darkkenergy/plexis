@@ -27,15 +27,17 @@ Pass the tracer in the options object when defining a domain or pipeline:
 ```typescript
 import {
   defineDomain, definePipeline,
-  state, edge, node, terminal,
+  when, edge, node, terminal,
   createTracer,
 } from '@tde.io/plexis';
 
 const tracer = createTracer();
 
 const order = defineDomain('order', () => {
-  state('pending', { edges: { SUBMIT: edge({ target: 'processing' }) } });
-  state('processing', { terminal: true });
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
+  });
+  when('processing', terminal());
   return { context: {}, initial: 'pending' } as const;
 }, { tracer });
 

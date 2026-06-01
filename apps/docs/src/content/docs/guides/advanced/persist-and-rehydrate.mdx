@@ -12,7 +12,7 @@ This guide shows the full round-trip: snapshot → serialize → store → read 
 Each HTTP request handles one user action. The domain is created fresh per request, restored from the database, a transition is followed, and the updated snapshot is written back.
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 import type { DomainSnapshot } from '@tde.io/plexis';
 
 // ── 1. Define the domain ─────────────────────────────────────────────────────
@@ -26,24 +26,18 @@ type CheckoutCtx = {
 
 function createCheckoutDomain() {
   return defineDomain<CheckoutCtx>('checkout', () => {
-    state('cart', {
-      edges: {
-        SET_SHIPPING: edge({ target: 'address' }),
-      },
+    when('cart', () => {
+      on('SET_SHIPPING', { target: 'address' });
     });
-    state('address', {
-      edges: {
-        SET_PAYMENT: edge({ target: 'payment' }),
-        BACK:        edge({ target: 'cart' }),
-      },
+    when('address', () => {
+      on('SET_PAYMENT', { target: 'payment' });
+      on('BACK', { target: 'cart' });
     });
-    state('payment', {
-      edges: {
-        CONFIRM: edge({ target: 'confirmed' }),
-        BACK:    edge({ target: 'address' }),
-      },
+    when('payment', () => {
+      on('CONFIRM', { target: 'confirmed' });
+      on('BACK', { target: 'address' });
     });
-    state('confirmed', { terminal: true });
+    when('confirmed', terminal());
 
     return {
       context: {
@@ -150,7 +144,7 @@ Each request creates a new domain instance. The domain object never crosses requ
 - `context` — a copy of the context object. Must be JSON-serializable.
 - `historyLength` — the count of completed transitions.
 
-**Not in the snapshot:** handler functions (`onEnter`, `onExit`, `action`, `guard`), active subscribers, and full history entries. These are part of the definition or the live runtime, not the serialized state.
+**Not in the snapshot:** handler functions (`enter`, `exit`, `action`, `guard`), active subscribers, and full history entries. These are part of the definition or the live runtime, not the serialized state.
 
 ## Version skew
 

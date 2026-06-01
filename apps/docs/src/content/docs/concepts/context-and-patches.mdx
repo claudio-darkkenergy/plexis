@@ -3,27 +3,25 @@ title: Context and Patches
 description: Learn how Plexis keeps context immutable — handlers return patches that shallow-merge over prior state, and returning nothing leaves context unchanged.
 ---
 
-Plexis never mutates context. Every handler that can modify state does so by returning a *patch* — a partial object that the runtime merges over the previous context. Understanding this model makes every `action`, `onEnter`, `onExit`, and node action predictable.
+Plexis never mutates context. Every handler that can modify state does so by returning a *patch* — a partial object that the runtime merges over the previous context. Understanding this model makes every `action`, `enter`, `exit`, and node action predictable.
 
 ## What context is
 
 Context is a plain object you provide when defining a domain or calling `pipeline.run()`. The runtime holds one canonical copy at any moment. Between transitions, that copy is stable and safe to read.
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 type OrderCtx = { orderId: string; total: number; paid: boolean };
 
 const order = defineDomain<OrderCtx>('order', () => {
-  state('pending', {
-    edges: {
-      PAY: edge({
-        target: 'paid',
-        action: async (ctx) => ({ paid: true }),
-      }),
-    },
+  when('pending', () => {
+    on('PAY', {
+      target: 'paid',
+      action: async (ctx) => ({ paid: true }),
+    });
   });
-  state('paid', { terminal: true });
+  when('paid', terminal());
 
   return {
     context: { orderId: 'ord_1', total: 99, paid: false },
@@ -52,7 +50,7 @@ The runtime applies the patch with `{ ...previous, ...patch }`. This means:
 action: async (ctx) => ({ paid: true })
 
 // Returning nothing — context unchanged
-onEnter: async (ctx) => {}
+enter: async (ctx) => {}
 
 // Replacing a key with undefined removes it from TypeScript's view
 // but that is unusual; prefer explicit false/null for optional flags

@@ -1,13 +1,13 @@
 ---
 title: Handler Input Types
-description: Reference for GuardInput, TransitionActionInput, StateHookInput, PipelineActionInput, and PipelineConditionInput.
+description: Reference for GuardInput, OnActionInput, StateHookInput, PipelineActionInput, and PipelineConditionInput.
 ---
 
 These types are passed as the second argument to guards, actions, hooks, and fork conditions.
 
 ## `GuardInput`
 
-Passed to edge guard functions: `guard: (ctx, input: GuardInput) => boolean`.
+Passed to flow guard functions: `guard: (ctx, input: GuardInput) => boolean`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -18,22 +18,20 @@ Passed to edge guard functions: `guard: (ctx, input: GuardInput) => boolean`.
 ### Example
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on } from '@tde.io/plexis';
 import type { GuardInput } from '@tde.io/plexis';
 
 type Ctx = { balance: number };
 
 const account = defineDomain<Ctx>('account', () => {
-  state('active', {
-    edges: {
-      WITHDRAW: edge({
-        target: 'active',
-        guard: (ctx, input: GuardInput) => {
-          const amount = input.payload as number;
-          return ctx.balance >= amount;
-        },
-      }),
-    },
+  when('active', () => {
+    on('WITHDRAW', {
+      target: 'active',
+      guard: (ctx, input: GuardInput) => {
+        const amount = input.payload as number;
+        return ctx.balance >= amount;
+      },
+    });
   });
   return { context: { balance: 100 }, initial: 'active' };
 });
@@ -41,9 +39,9 @@ const account = defineDomain<Ctx>('account', () => {
 
 ---
 
-## `TransitionActionInput`
+## `OnActionInput`
 
-Passed to edge action functions: `action: (ctx, input: TransitionActionInput) => PatchLike`.
+Passed to flow action functions: `action: (ctx, input: OnActionInput) => PatchLike`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -54,22 +52,20 @@ Passed to edge action functions: `action: (ctx, input: TransitionActionInput) =>
 ### Example
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
-import type { TransitionActionInput } from '@tde.io/plexis';
+import { defineDomain, when, on } from '@tde.io/plexis';
+import type { OnActionInput } from '@tde.io/plexis';
 
 type Ctx = { balance: number; lastEvent: string };
 
 const account = defineDomain<Ctx>('account', () => {
-  state('active', {
-    edges: {
-      DEPOSIT: edge({
-        target: 'active',
-        action: (ctx, input: TransitionActionInput) => ({
-          balance: ctx.balance + (input.payload as number),
-          lastEvent: input.event,
-        }),
+  when('active', () => {
+    on('DEPOSIT', {
+      target: 'active',
+      action: (ctx, input: OnActionInput) => ({
+        balance: ctx.balance + (input.payload as number),
+        lastEvent: input.event,
       }),
-    },
+    });
   });
   return { context: { balance: 0, lastEvent: '' }, initial: 'active' };
 });
@@ -79,7 +75,7 @@ const account = defineDomain<Ctx>('account', () => {
 
 ## `StateHookInput`
 
-Passed to `onEnter` and `onExit` hooks: `onEnter: (ctx, input: StateHookInput) => PatchLike`.
+Passed to `enter` and `exit` hooks: `enter(fn)` where `fn: (ctx, input: StateHookInput) => PatchLike`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -90,18 +86,18 @@ Passed to `onEnter` and `onExit` hooks: `onEnter: (ctx, input: StateHookInput) =
 ### Example
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, enter, on } from '@tde.io/plexis';
 import type { StateHookInput } from '@tde.io/plexis';
 
 type Ctx = { enteredVia: string };
 
 const machine = defineDomain<Ctx>('machine', () => {
-  state('idle', { edges: { START: edge({ target: 'running' }) } });
-  state('running', {
-    onEnter: (ctx, input: StateHookInput) => ({
+  when('idle', () => { on('START', { target: 'running' }); });
+  when('running', () => {
+    enter((ctx, input: StateHookInput) => ({
       enteredVia: input.event ?? 'initial',
-    }),
-    edges: { STOP: edge({ target: 'idle' }) },
+    }));
+    on('STOP', { target: 'idle' });
   });
   return { context: { enteredVia: '' }, initial: 'idle' };
 });
@@ -111,7 +107,7 @@ const machine = defineDomain<Ctx>('machine', () => {
 
 ## `PipelineActionInput`
 
-Passed to pipeline node action functions: `action: (ctx, input: PipelineActionInput) => PatchLike`.
+Passed to pipeline node action functions: `action(fn)` where `fn: (ctx, input: PipelineActionInput) => PatchLike`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -129,12 +125,10 @@ import type { PipelineActionInput } from '@tde.io/plexis';
 type Ctx = { processed: boolean; inputValue: unknown };
 
 const pipeline = definePipeline<Ctx>('process', () => {
-  node('handle', terminal({
-    action: (ctx, input: PipelineActionInput) => ({
-      processed: true,
-      inputValue: input.input,
-    }),
-  }));
+  node('handle', terminal((ctx, input: PipelineActionInput) => ({
+    processed: true,
+    inputValue: input.input,
+  })));
   return { initial: 'handle' };
 });
 
@@ -146,7 +140,7 @@ await pipeline.run({ processed: false, inputValue: null }, { userId: 'u1' });
 
 ## `PipelineConditionInput`
 
-Passed to fork condition functions: `condition: (ctx, input: PipelineConditionInput) => boolean`.
+Passed to fork condition functions: `fork((ctx, input: PipelineConditionInput) => boolean, target)`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -158,23 +152,21 @@ Passed to fork condition functions: `condition: (ctx, input: PipelineConditionIn
 ### Example
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 import type { PipelineConditionInput } from '@tde.io/plexis';
 
 type Ctx = { score: number };
 
 const pipeline = definePipeline<Ctx>('grade', () => {
-  node('decide', {
-    forks: [
-      fork(
-        (ctx, input: PipelineConditionInput) => {
-          const threshold = (input.input as { threshold: number }).threshold;
-          return ctx.score >= threshold;
-        },
-        'pass'
-      ),
-      fork(undefined, 'fail'),
-    ],
+  node('decide', () => {
+    fork(
+      (ctx, input: PipelineConditionInput) => {
+        const threshold = (input.input as { threshold: number }).threshold;
+        return ctx.score >= threshold;
+      },
+      'pass'
+    );
+    fork(undefined, 'fail');
   });
   node('pass', terminal());
   node('fail', terminal());

@@ -8,11 +8,13 @@ description: Subscribe to domain transitions with domain.subscribe, read the cur
 ## Basic subscription
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
-  state('pending',    { edges: { SUBMIT: edge({ target: 'processing' }) } });
-  state('processing', { terminal: true });
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
+  });
+  when('processing', terminal());
   return { context: { orderId: 'ord_1' }, initial: 'pending' };
 });
 

@@ -10,22 +10,18 @@ Plexis models business logic as two distinct things: long-lived state that outla
 A **Domain** is a state machine that persists. It holds the current state, context, and transition history for the lifetime of the object. Each call to `domain.follow()` moves the machine from one state to another and returns the new context. The machine is still there after the transition, ready to handle the next event.
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
-  state('pending', {
-    edges: {
-      SUBMIT: edge({ target: 'processing' }),
-    },
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
   });
-  state('processing', {
-    edges: {
-      FULFILL: edge({ target: 'fulfilled' }),
-      CANCEL:  edge({ target: 'cancelled' }),
-    },
+  when('processing', () => {
+    on('FULFILL', { target: 'fulfilled' });
+    on('CANCEL',  { target: 'cancelled' });
   });
-  state('fulfilled', { terminal: true });
-  state('cancelled', { terminal: true });
+  when('fulfilled', terminal());
+  when('cancelled', terminal());
 
   return { context: { orderId: 'ord_1' }, initial: 'pending' };
 });
@@ -42,15 +38,13 @@ The domain retains its state between operations. `order.state` is `'fulfilled'` 
 A **Pipeline** is a workflow that executes start-to-finish in a single invocation. It begins at the `initial` node, evaluates fork conditions to decide which node comes next, runs node actions, and stops at a terminal node (or when no fork matches). After `pipeline.run()` returns, the pipeline itself is unchanged — you can call `run()` again with different context.
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 const validatePayment = definePipeline('validate-payment', () => {
-  node('check-card', {
-    action: async (ctx) => ({ checked: true }),
-    forks: [
-      fork((ctx) => ctx.cardValid,  'charge',  { label: 'valid' }),
-      fork((ctx) => !ctx.cardValid, 'decline', { label: 'invalid' }),
-    ],
+  node('check-card', () => {
+    action(async (ctx) => ({ checked: true }));
+    fork((ctx) => ctx.cardValid,  'charge',  { label: 'valid' });
+    fork((ctx) => !ctx.cardValid, 'decline', { label: 'invalid' });
   });
   node('charge',  terminal());
   node('decline', terminal());
@@ -78,27 +72,25 @@ Each `run()` is isolated. There is no "current state" on the pipeline — contex
 
 **Use a Pipeline when** you need a defined execution path from start to finish — a payment flow, a validation sequence, a multi-step transformation.
 
-**Combine them** when a domain transition triggers a workflow: attach a Pipeline to an edge or a state entry hook. The Domain manages which stage the business object is at; the Pipeline handles the work of getting there.
+**Combine them** when a domain flow triggers a workflow: attach a Pipeline to a flow or a state entry hook. The Domain manages which stage the business object is at; the Pipeline handles the work of getting there.
 
 ```typescript
-import { defineDomain, definePipeline, state, edge, node, fork, terminal } from '@tde.io/plexis';
+import { defineDomain, definePipeline, when, on, node, action, fork, terminal } from '@tde.io/plexis';
 
 const chargeCard = definePipeline('charge-card', () => {
-  node('charge', {
-    action: async (ctx) => ({ charged: true }),
-    forks: [fork(undefined, 'done')],
+  node('charge', () => {
+    action(async (ctx) => ({ charged: true }));
+    fork(undefined, 'done');
   });
   node('done', terminal());
   return { initial: 'charge' };
 });
 
 const checkout = defineDomain('checkout', () => {
-  state('cart', {
-    edges: {
-      CHECKOUT: edge({ target: 'processing', pipeline: chargeCard }),
-    },
+  when('cart', () => {
+    on('CHECKOUT', { target: 'processing', pipeline: chargeCard });
   });
-  state('processing', { terminal: true });
+  when('processing', terminal());
   return { context: {}, initial: 'cart' };
 });
 ```

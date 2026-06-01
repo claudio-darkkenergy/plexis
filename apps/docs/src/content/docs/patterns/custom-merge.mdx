@@ -8,23 +8,13 @@ By default Plexis merges context patches with `{ ...previous, ...patch }` — a 
 ## The default shallow merge
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 type Ctx = { orderId: string; flags: { paid: boolean; shipped: boolean } };
 
 const order = defineDomain<Ctx>('order', () => {
-  state('pending', {
-    edges: {
-      PAY: edge({
-        target: 'paid',
-        // Patch only sets paid — but the default merge shallow-copies the top level,
-        // so flags: { paid: true } REPLACES the entire flags object.
-        // { shipped: false } is lost!
-        action: async () => ({ flags: { paid: true } }),
-      }),
-    },
-  });
-  state('paid', { terminal: true });
+  when('pending', () => {});
+  when('paid', terminal());
   return {
     context: { orderId: 'ord_1', flags: { paid: false, shipped: false } },
     initial: 'pending',
@@ -41,22 +31,15 @@ console.log(order.context.flags);
 Pass `merge` in the second argument to `defineDomain` or `definePipeline`. The function receives `(previous, patch, metadata)` and must return a complete new context object — it must not mutate `previous`.
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 type Ctx = { orderId: string; flags: { paid: boolean; shipped: boolean } };
 
 const order = defineDomain<Ctx>(
   'order',
   () => {
-    state('pending', {
-      edges: {
-        PAY: edge({
-          target: 'paid',
-          action: async () => ({ flags: { paid: true } }),
-        }),
-      },
-    });
-    state('paid', { terminal: true });
+    when('pending', () => {});
+    when('paid', terminal());
     return {
       context: { orderId: 'ord_1', flags: { paid: false, shipped: false } },
       initial: 'pending',
@@ -84,22 +67,16 @@ console.log(order.context.flags);
 Use the same pattern to append to arrays rather than replace them:
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 type Ctx = { items: string[] };
 
 const cart = defineDomain<Ctx>(
   'cart',
   () => {
-    state('open', {
-      edges: {
-        ADD: edge({
-          target: 'open',
-          action: async (ctx, { payload }) => ({
-            items: [payload as string],
-          }),
-        }),
-      },
+    when('open', () => {
+      on('ADD', { target: 'open',
+          action: async (ctx, { payload });
     });
     return { context: { items: [] }, initial: 'open' };
   },
@@ -138,6 +115,6 @@ const merge = (previous: Ctx, patch: Partial<Ctx>) => {
 
 ## The `metadata` argument
 
-The third argument to `merge` is a `MergeMetadata` object with fields like `phase`, `domainId`, `pipelineId`, `stateId`, and `event`. Use it to apply different merge strategies per phase if needed — for example, deep merge only during `onEnter` but shallow merge on edge actions.
+The third argument to `merge` is a `MergeMetadata` object with fields like `phase`, `domainId`, `pipelineId`, `stateId`, and `event`. Use it to apply different merge strategies per phase if needed — for example, deep merge only during `enter` but shallow merge on edge actions.
 
 For full type signatures, see the [Definition Functions reference](/reference/definition-functions).

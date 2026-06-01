@@ -10,7 +10,7 @@ A saga is a sequence of steps where a later failure means the earlier completed 
 This saga reserves inventory, charges the card, and ships the order. If charging fails, it releases the inventory. If shipping fails, it both refunds the charge and releases the inventory. Each step has an explicit compensation route.
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 type FulfillCtx = {
   orderId: string;
@@ -25,64 +25,37 @@ type FulfillCtx = {
 const fulfillOrder = definePipeline<FulfillCtx>('fulfill-order', () => {
 
   // ── Step 1: Reserve inventory ───────────────────────────────────────────────
-  node('reserve-inventory', {
-    action: async (ctx) => {
-      // In a real system: call inventory service
-      return { inventoryReserved: true };
-    },
-    forks: [
-      fork((ctx) => ctx.inventoryReserved, 'charge-card',          { label: 'reserved' }),
-      fork(undefined,                       'saga-failed-no-stock', { label: 'no-stock' }),
-    ],
+  node('reserve-inventory', () => {
+    action(async (ctx) => {);
+    fork((ctx);
+    fork(undefined,                       'saga-failed-no-stock', { label: 'no-stock' });
   });
 
   // ── Step 2: Charge the card ─────────────────────────────────────────────────
-  node('charge-card', {
-    action: async (ctx) => {
-      // In a real system: call payment processor
-      const chargeId = `ch_${ctx.orderId}`;
-      return { chargeId };
-    },
-    forks: [
-      fork((ctx) => ctx.chargeId !== null, 'ship-order',                  { label: 'charged' }),
-      fork(undefined,                       'compensate-release-inventory', { label: 'charge-failed' }),
-    ],
+  node('charge-card', () => {
+    action(async (ctx) => {);
+    fork((ctx);
+    fork(undefined,                       'compensate-release-inventory', { label: 'charge-failed' });
   });
 
   // ── Step 3: Ship the order ──────────────────────────────────────────────────
-  node('ship-order', {
-    action: async (ctx) => {
-      // Simulate a transient failure on first two attempts
-      if (ctx.shipAttempts < 2) {
-        return { shipAttempts: ctx.shipAttempts + 1, shipped: false };
-      }
-      return { shipped: true };
-    },
-    forks: [
-      fork((ctx) => ctx.shipped,              'saga-complete',              { label: 'shipped' }),
-      // Retry: route back to ship-order while we haven't hit the limit
-      fork((ctx) => ctx.shipAttempts < 3,     'ship-order',                 { label: 'retry' }),
-      // Give up: compensate both prior steps
-      fork(undefined,                          'compensate-refund-and-release', { label: 'shipping-failed' }),
-    ],
+  node('ship-order', () => {
+    action(async (ctx) => {);
+    fork((ctx);
+    fork((ctx);
+    fork(undefined,                          'compensate-refund-and-release', { label: 'shipping-failed' });
   });
 
   // ── Compensation: release inventory (charge never happened) ─────────────────
-  node('compensate-release-inventory', {
-    action: async (ctx) => {
-      // In a real system: release inventory reservation
-      return { inventoryReserved: false, error: 'charge-failed' };
-    },
-    forks: [fork(undefined, 'saga-compensated')],
+  node('compensate-release-inventory', () => {
+    action(async (ctx) => {);
+    fork(undefined, 'saga-compensated');
   });
 
   // ── Compensation: refund + release (charge succeeded, shipping failed) ───────
-  node('compensate-refund-and-release', {
-    action: async (ctx) => {
-      // In a real system: void ctx.chargeId, release inventory
-      return { chargeId: null, inventoryReserved: false, error: 'ship-failed' };
-    },
-    forks: [fork(undefined, 'saga-compensated')],
+  node('compensate-refund-and-release', () => {
+    action(async (ctx) => {);
+    fork(undefined, 'saga-compensated');
   });
 
   // ── Terminals ───────────────────────────────────────────────────────────────
@@ -130,26 +103,13 @@ Because `ship-order` forks back to itself on retry, the pipeline traverses `ship
 Use the fulfillment saga as the pipeline on an order domain edge to keep your domain state machine clean:
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 type OrderCtx = FulfillCtx;
 
 const order = defineDomain<OrderCtx>('order', () => {
-  state('pending', {
-    edges: {
-      FULFILL: edge({
-        target: 'fulfilled',
-        guard: async (ctx) => ctx.chargeId === null, // not already charged
-        pipeline: fulfillOrder,
-        action: async (ctx) => {
-          // Only transition if saga completed successfully
-          if (!ctx.shipped) throw new Error('Saga did not complete');
-          return {};
-        },
-      }),
-    },
-  });
-  state('fulfilled', { terminal: true });
+  when('pending', () => {});
+  when('fulfilled', terminal());
   return {
     context: {
       orderId: 'ord_1',

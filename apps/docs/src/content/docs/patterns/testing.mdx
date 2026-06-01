@@ -8,13 +8,17 @@ Plexis domains and pipelines are plain async objects with no hidden global state
 ## Testing a domain transition
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 import { expect, test } from 'vitest';
 
 const order = defineDomain('order', () => {
-  state('pending',    { edges: { SUBMIT: edge({ target: 'processing' }) } });
-  state('processing', { edges: { FULFILL: edge({ target: 'fulfilled' }) } });
-  state('fulfilled',  { terminal: true });
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
+  });
+  when('processing', () => {
+    on('FULFILL', { target: 'fulfilled' });
+  });
+  when('fulfilled', terminal());
   return { context: { orderId: 'ord_1' }, initial: 'pending' };
 });
 
@@ -30,7 +34,7 @@ test('SUBMIT transitions pending → processing', async () => {
 
 ## Using `followFrom()` to start at an arbitrary state
 
-Real domain paths often require several transitions to reach the state you want to test. `followFrom()` teleports the domain to any registered state before following the event — without running `onExit`, `onEnter`, or any pipeline for the intermediate states.
+Real domain paths often require several transitions to reach the state you want to test. `followFrom()` teleports the domain to any registered state before following the event — without running `exit`, `enter`, or any pipeline for the intermediate states.
 
 ```typescript
 test('FULFILL transitions processing → fulfilled', async () => {
@@ -67,17 +71,13 @@ test('history records both transitions', async () => {
 ## Testing that a guard blocks a transition
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const account = defineDomain('account', () => {
-  state('open', {
-    edges: {
-      WITHDRAW: edge({
-        target: 'open',
+  when('open', () => {
+    on('WITHDRAW', { target: 'open',
         guard: async (ctx) => ctx.balance >= ctx.amount,
-        action: async (ctx) => ({ balance: ctx.balance - ctx.amount }),
-      }),
-    },
+        action: async (ctx) => ({ balance: ctx.balance - ctx.amount });
   });
   return { context: { balance: 50, amount: 100 }, initial: 'open' };
 });
@@ -95,17 +95,15 @@ test('WITHDRAW is blocked when balance is insufficient', async () => {
 Construct context to satisfy exactly the condition you want to exercise, then call `pipeline.run()`:
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 import { expect, test } from 'vitest';
 
 type Ctx = { cardValid: boolean; charged: boolean };
 
 const charge = definePipeline<Ctx>('charge', () => {
-  node('check-card', {
-    forks: [
-      fork((ctx) => ctx.cardValid,  'charge',  { label: 'valid' }),
-      fork((ctx) => !ctx.cardValid, 'decline', { label: 'invalid' }),
-    ],
+  node('check-card', () => {
+    fork((ctx);
+    fork((ctx);
   });
   node('charge',  terminal());
   node('decline', terminal());
@@ -134,8 +132,10 @@ A single domain instance accumulates state and history across calls. For isolate
 ```typescript
 function makeOrder() {
   return defineDomain('order', () => {
-    state('pending',    { edges: { SUBMIT: edge({ target: 'processing' }) } });
-    state('processing', { terminal: true });
+    when('pending', () => {
+      on('SUBMIT', { target: 'processing' });
+    });
+    when('processing', terminal());
     return { context: {}, initial: 'pending' };
   });
 }

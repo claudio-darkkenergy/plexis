@@ -10,7 +10,7 @@ In this guide a single `POST /api/records` endpoint is backed by a Plexis pipeli
 Each stage of request processing is a pipeline node. Forks decide which path the request follows based on the outcome of the preceding node.
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 type RequestCtx = {
   body: Record<string, unknown>;
@@ -22,38 +22,21 @@ type RequestCtx = {
 };
 
 const handleRequest = definePipeline<RequestCtx>('handle-request', () => {
-  node('validate', {
-    action: async (ctx) => {
-      const { userId, data } = ctx.body;
-      if (!userId || !data) {
-        return { validated: false, error: 'Missing userId or data' };
-      }
-      return { validated: true, userId: userId as string };
-    },
-    forks: [
-      fork((ctx) => !ctx.validated, 'error-response', { label: 'validation-failed' }),
-      fork((ctx) => ctx.validated,  'service',        { label: 'valid' }),
-    ],
+  node('validate', () => {
+    action(async (ctx) => {);
+    fork((ctx);
+    fork((ctx);
   });
 
-  node('service', {
-    action: async (ctx) => {
-      if (ctx.userId === 'banned') {
-        return { validated: false, error: 'User not authorized' };
-      }
-      return {};
-    },
-    forks: [
-      fork((ctx) => !ctx.validated, 'error-response', { label: 'service-failed' }),
-      fork(() => true,              'persist',         { label: 'ok' }),
-    ],
+  node('service', () => {
+    action(async (ctx) => {);
+    fork((ctx);
+    fork(();
   });
 
-  node('persist', {
-    action: async (ctx) => ({
-      recordId: `rec_${ctx.userId}_${Date.now()}`,
-    }),
-    forks: [fork(() => true, 'respond', { label: 'persisted' })],
+  node('persist', () => {
+    action(async (ctx) => ({);
+    fork(();
   });
 
   node('respond', terminal({
@@ -77,25 +60,21 @@ const handleRequest = definePipeline<RequestCtx>('handle-request', () => {
 A new domain instance is created per request so concurrent requests do not share state. The domain tracks where each request is in its lifecycle independently from the handler logic.
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 type RequestLifecycle = { requestId: string };
 
 function createRequestDomain(requestId: string) {
   return defineDomain<RequestLifecycle>('request', () => {
-    state('pending', {
-      edges: {
-        START: edge({ target: 'processing' }),
-      },
+    when('pending', () => {
+      on('START', { target: 'processing' });
     });
-    state('processing', {
-      edges: {
-        COMPLETE: edge({ target: 'complete' }),
-        FAIL:     edge({ target: 'failed' }),
-      },
+    when('processing', () => {
+      on('COMPLETE', { target: 'complete' });
+      on('FAIL', { target: 'failed' });
     });
-    state('complete', { terminal: true });
-    state('failed',   { terminal: true });
+    when('complete', terminal());
+    when('failed', terminal());
 
     return { context: { requestId }, initial: 'pending' };
   });

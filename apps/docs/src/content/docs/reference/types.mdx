@@ -186,22 +186,16 @@ Return a `Partial<TContext>` to merge changes into the context. Return `void`, `
 ### Example
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 type Ctx = { count: number };
 
 const counter = defineDomain<Ctx>('counter', () => {
-  state('active', {
-    edges: {
-      INCREMENT: edge({
-        target: 'active',
-        action: (ctx) => ({ count: ctx.count + 1 }), // returns Partial<Ctx>
-      }),
-      NOOP: edge({
-        target: 'active',
-        action: () => undefined, // returns void — no context change
-      }),
-    },
+  when('active', () => {
+    on('INCREMENT', { target: 'active',
+        action: (ctx) => ({ count: ctx.count + 1 });
+    on('NOOP', { target: 'active',
+        action: () => undefined, // returns void — no context change });
   });
   return { context: { count: 0 }, initial: 'active' };
 });
@@ -224,12 +218,12 @@ type ErrorPolicy = 'throw' | 'return' | 'trace-and-return'
 ### Example
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const domain = defineDomain(
   'order',
   () => {
-    state('active', { edges: { FAIL: edge({ target: 'active', action: () => { throw new Error('oops'); } }) } });
+    when('active', () => {});
     return { context: {}, initial: 'active', errorPolicy: 'return' };
   }
 );
@@ -270,12 +264,14 @@ Single recorded trace event returned by `tracer.history()` and `tracer.byTraceId
 ### Example
 
 ```typescript
-import { createTracer, defineDomain, state, edge } from '@tde.io/plexis';
+import { createTracer, defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const tracer = createTracer({ captureContext: 'after' });
 const domain = defineDomain('order', () => {
-  state('pending', { edges: { SUBMIT: edge({ target: 'done' }) } });
-  state('done', { terminal: true });
+  when('pending', () => {
+    on('SUBMIT', { target: 'done' });
+  });
+  when('done', terminal());
   return { context: {}, initial: 'pending' };
 }, { tracer });
 

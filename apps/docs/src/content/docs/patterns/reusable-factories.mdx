@@ -8,23 +8,21 @@ description: Wrap defineDomain or definePipeline in a plain function to create p
 ## A domain factory
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 type OrderCtx = { orderId: string; userId: string; total: number };
 
 function createOrderDomain(orderId: string, userId: string) {
   return defineDomain<OrderCtx>('order', () => {
-    state('pending', {
-      edges: {
-        SUBMIT: edge({ target: 'processing' }),
-        CANCEL: edge({ target: 'cancelled' }),
-      },
+    when('pending', () => {
+      on('SUBMIT', { target: 'processing' });
+      on('CANCEL', { target: 'cancelled' });
     });
-    state('processing', {
-      edges: { FULFILL: edge({ target: 'fulfilled' }) },
+    when('processing', () => {
+      on('FULFILL', { target: 'fulfilled' });
     });
-    state('fulfilled', { terminal: true });
-    state('cancelled', { terminal: true });
+    when('fulfilled', terminal());
+    when('cancelled', terminal());
 
     return {
       context: { orderId, userId, total: 0 },
@@ -46,25 +44,20 @@ console.log(orderB.state);  // 'pending' — independent
 ## A pipeline factory
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 type ChargeCtx = { amount: number; currency: string; charged: boolean };
 
 function createChargePipeline(maxAmount: number) {
   return definePipeline<ChargeCtx>('charge', () => {
-    node('validate', {
-      forks: [
-        fork(
-          (ctx) => ctx.amount > 0 && ctx.amount <= maxAmount,
-          'charge',
-          { label: 'valid' },
-        ),
-        fork(undefined, 'reject', { label: 'exceeds-limit' }),
-      ],
+    node('validate', () => {
+      fork(
+          (ctx);
+      fork(undefined, 'reject', { label: 'exceeds-limit' });
     });
-    node('charge', {
-      action: async (ctx) => ({ charged: true }),
-      forks: [fork(undefined, 'done')],
+    node('charge', () => {
+      action(async (ctx) => ({ charged: true }));
+      fork(undefined, 'done');
     });
     node('reject', terminal());
     node('done',   terminal());
@@ -91,7 +84,7 @@ console.log(result3.finalNode); // 'done'   — within large limit
 A sub-pipeline referenced by a factory is the same object each time if you define it outside the factory. This is fine — pipelines are stateless, so sharing them is safe.
 
 ```typescript
-import { definePipeline, defineDomain, state, edge, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, defineDomain, when, on, node, fork, terminal } from '@tde.io/plexis';
 
 // Defined once, shared across all factory calls
 const sendReceipt = definePipeline('send-receipt', () => {
@@ -101,12 +94,10 @@ const sendReceipt = definePipeline('send-receipt', () => {
 
 function createCheckout(storeId: string) {
   return defineDomain('checkout', () => {
-    state('cart', {
-      edges: {
-        PAY: edge({ target: 'paid', pipeline: sendReceipt }),
-      },
+    when('cart', () => {
+      on('PAY', { target: 'paid', pipeline: sendReceipt });
     });
-    state('paid', { terminal: true });
+    when('paid', terminal());
     return { context: { storeId }, initial: 'cart' };
   });
 }

@@ -8,12 +8,16 @@ description: Take a domain snapshot and restore from it — what gets serialized
 ## Taking a snapshot
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
-  state('pending',    { edges: { SUBMIT: edge({ target: 'processing' }) } });
-  state('processing', { edges: { SHIP:   edge({ target: 'shipped' }) } });
-  state('shipped',    { terminal: true });
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
+  });
+  when('processing', () => {
+    on('SHIP', { target: 'shipped' });
+  });
+  when('shipped', terminal());
   return { context: { orderId: 'ord_1', items: 3 }, initial: 'pending' };
 });
 
@@ -29,9 +33,13 @@ const snap = order.snapshot();
 
 ```typescript
 const order2 = defineDomain('order', () => {
-  state('pending',    { edges: { SUBMIT: edge({ target: 'processing' }) } });
-  state('processing', { edges: { SHIP:   edge({ target: 'shipped' }) } });
-  state('shipped',    { terminal: true });
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
+  });
+  when('processing', () => {
+    on('SHIP', { target: 'shipped' });
+  });
+  when('shipped', terminal());
   return { context: { orderId: '', items: 0 }, initial: 'pending' };
 });
 
@@ -46,7 +54,7 @@ console.log(order2.context.orderId);  // 'ord_1'
 
 Snapshots capture only the **data** layer: state name, context object, and history length. They do not capture:
 
-- **Handler functions** — `onEnter`, `onExit`, `action`, `guard`, `condition` are part of the domain definition, not the snapshot. They are always sourced from the current definition at runtime.
+- **Handler functions** — `enter`, `exit`, `action`, `guard`, `condition` are part of the domain definition, not the snapshot. They are always sourced from the current definition at runtime.
 - **Subscribers** — `subscribe()` listeners are not saved or restored.
 - **Full history entries** — only the count is stored, not the individual `DomainHistoryEntry` records.
 

@@ -57,10 +57,10 @@ const payment = definePipeline('payment', () => {
 Registration helpers (`state`, `edge`, `node`, `fork`, `terminal`) are only valid inside an active builder scope opened by `defineDomain` or `definePipeline`. Calling them outside throws `PlexisError` with code `BUILDER_CLOSED`:
 
 ```typescript
-import { state } from '@tde.io/plexis';
+import { when } from '@tde.io/plexis';
 
 // Throws PlexisError: BUILDER_CLOSED
-state('pending', { edges: {} });
+when('pending', () => {});
 ```
 
 This safeguard prevents accidentally sharing registration calls across setup functions or calling helpers at module load time outside a setup context.

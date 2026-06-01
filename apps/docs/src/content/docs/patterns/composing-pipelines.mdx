@@ -8,13 +8,13 @@ A fork target can be a `Pipeline` object instead of a node ID string. When a for
 ## Sub-pipeline as a fork target
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 // A small, reusable pipeline
 const notifyUser = definePipeline('notify-user', () => {
-  node('send-email', {
-    action: async (ctx) => ({ notified: true }),
-    forks: [fork(undefined, 'done')],
+  node('send-email', () => {
+    action(async (ctx) => ({ notified: true }));
+    fork(undefined, 'done');
   });
   node('done', terminal());
   return { initial: 'send-email' };
@@ -22,13 +22,10 @@ const notifyUser = definePipeline('notify-user', () => {
 
 // A larger pipeline that embeds notifyUser as a branch
 const onboard = definePipeline('onboard', () => {
-  node('create-account', {
-    action: async (ctx) => ({ accountCreated: true }),
-    forks: [
-      // When the fork condition matches, notifyUser runs as a sub-pipeline
-      fork((ctx) => ctx.accountCreated, notifyUser, { label: 'notify' }),
-      fork((ctx) => !ctx.accountCreated, 'fail', { label: 'failed' }),
-    ],
+  node('create-account', () => {
+    action(async (ctx) => ({ accountCreated: true }));
+    fork((ctx);
+    fork((ctx);
   });
   node('fail', terminal());
   return { initial: 'create-account' };
@@ -47,12 +44,12 @@ When the sub-pipeline finishes, its final context flows back into the parent as 
 Because a `Pipeline` is just an object, you can pass it as a fork target in multiple pipelines or attach it to multiple domain states. Each invocation is independent.
 
 ```typescript
-import { definePipeline, defineDomain, state, edge, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, defineDomain, when, on, node, fork, terminal } from '@tde.io/plexis';
 
 const sendReceipt = definePipeline('send-receipt', () => {
-  node('email', {
-    action: async (ctx) => ({ receiptSent: true }),
-    forks: [fork(undefined, 'done')],
+  node('email', () => {
+    action(async (ctx) => ({ receiptSent: true }));
+    fork(undefined, 'done');
   });
   node('done', terminal());
   return { initial: 'email' };
@@ -60,22 +57,19 @@ const sendReceipt = definePipeline('send-receipt', () => {
 
 // Used as a fork target in one pipeline
 const checkout = definePipeline('checkout', () => {
-  node('charge', {
-    action: async (ctx) => ({ charged: true }),
-    forks: [fork((ctx) => ctx.charged, sendReceipt, { label: 'send-receipt' })],
+  node('charge', () => {
+    action(async (ctx) => ({ charged: true }));
+    fork((ctx);
   });
   return { initial: 'charge' };
 });
 
 // Also attached to a domain state entry
 const order = defineDomain('order', () => {
-  state('pending', {
-    edges: { PAY: edge({ target: 'paid' }) },
+  when('pending', () => {
+    on('PAY', { target: 'paid' });
   });
-  state('paid', {
-    pipeline: sendReceipt,  // runs on entry
-    terminal: true,
-  });
+  when('paid', terminal());
   return { context: {}, initial: 'pending' };
 });
 ```
@@ -87,26 +81,23 @@ const order = defineDomain('order', () => {
 Context is passed into the parent pipeline's `run()`, merged as each node action runs, and passed into the sub-pipeline's `run()` when the fork triggers it. The sub-pipeline's final context becomes the parent's context for any subsequent nodes.
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 type Ctx = { amount: number; taxed: boolean; total: number };
 
 const applyTax = definePipeline<Ctx>('apply-tax', () => {
-  node('tax', {
-    action: async (ctx) => ({
-      taxed: true,
-      total: ctx.amount * 1.1,
-    }),
-    forks: [fork(undefined, 'done')],
+  node('tax', () => {
+    action(async (ctx) => ({);
+    fork(undefined, 'done');
   });
   node('done', terminal());
   return { initial: 'tax' };
 });
 
 const invoice = definePipeline<Ctx>('invoice', () => {
-  node('validate', {
-    action: async (ctx) => ({ amount: 100 }),
-    forks: [fork((ctx) => ctx.amount > 0, applyTax, { label: 'apply-tax' })],
+  node('validate', () => {
+    action(async (ctx) => ({ amount: 100 }));
+    fork((ctx);
   });
   return { initial: 'validate' };
 });

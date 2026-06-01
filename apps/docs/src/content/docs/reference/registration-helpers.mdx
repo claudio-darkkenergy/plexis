@@ -1,16 +1,16 @@
 ---
 title: Registration Helpers
-description: Reference for state, edge, node, fork, and terminal — the helpers used inside defineDomain and definePipeline setup functions.
+description: Reference for when, enter, exit, on, node, action, fork, and terminal — the helpers used inside defineDomain and definePipeline setup functions.
 ---
 
-These functions are only valid inside an active `defineDomain` or `definePipeline` setup function. Calling them outside throws `PlexisError` with code `BUILDER_CLOSED`.
+These functions are only valid inside an active `defineDomain` or `definePipeline` setup function (or inside `when`/`node` scopes). Calling them outside throws `PlexisError` with code `BUILDER_CLOSED`.
 
-## `state(id, def)`
+## `when(id, fn | terminal())`
 
 Registers a state in the current domain builder scope.
 
 ```typescript
-function state<TContext>(id: string, def: StateNodeDef<TContext>): void
+function when<TContext>(id: string, x: (() => void) | TerminalSentinel): void
 ```
 
 ### Parameters
@@ -19,18 +19,9 @@ function state<TContext>(id: string, def: StateNodeDef<TContext>): void
 
 Unique state identifier.
 
-**`def`** `StateNodeDef<TContext>`
+**`x`** `(() => void) | TerminalSentinel`
 
-State definition:
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `edges` | `Record<string, EdgeDef<TContext>>` | No | Map of event name to edge definition |
-| `onEnter` | `(ctx: TContext, input: StateHookInput) => PatchLike` | No | Hook called when entering this state |
-| `onExit` | `(ctx: TContext, input: StateHookInput) => PatchLike` | No | Hook called when exiting this state |
-| `pipeline` | `Pipeline<TContext>` | No | Pipeline to run on state entry, after `onEnter` |
-| `terminal` | `boolean` | No | When `true`, this is a terminal state |
-| `metadata` | `Record<string, unknown>` | No | Arbitrary user-defined metadata |
+Either a synchronous setup function that calls `enter`, `exit`, and `on` to configure the state, or the result of `terminal()` to register a terminal state with no further behavior.
 
 ### Return value
 
@@ -39,16 +30,16 @@ None (`void`).
 ### Example
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, enter, exit, on, terminal } from '@tde.io/plexis';
 
 const door = defineDomain('door', () => {
-  state('closed', {
-    edges: { OPEN: edge({ target: 'open' }) },
-    onExit: async (ctx) => ({ lastClosed: Date.now() }),
+  when('closed', () => {
+    exit(async (ctx) => ({ lastClosed: Date.now() }));
+    on('OPEN', { target: 'open' });
   });
-  state('open', {
-    edges: { CLOSE: edge({ target: 'closed' }) },
-    onEnter: async (ctx) => ({ lastOpened: Date.now() }),
+  when('open', () => {
+    enter(async (ctx) => ({ lastOpened: Date.now() }));
+    on('CLOSE', { target: 'closed' });
   });
   return { context: { lastOpened: 0, lastClosed: 0 }, initial: 'closed' };
 });
@@ -56,64 +47,86 @@ const door = defineDomain('door', () => {
 
 ---
 
-## `edge(def)`
+## `enter(fn)`
 
-Creates an `EdgeDef` for use in a state's `edges` map.
+Registers an entry lifecycle hook for the current state. Must be called inside a `when()` setup function.
 
 ```typescript
-function edge<TContext>(def: EdgeDef<TContext>): EdgeDef<TContext>
+function enter<TContext>(
+  fn: (ctx: TContext, input: StateHookInput) => PatchLike | Promise<PatchLike>
+): void
+```
+
+---
+
+## `exit(fn)`
+
+Registers an exit lifecycle hook for the current state. Must be called inside a `when()` setup function.
+
+```typescript
+function exit<TContext>(
+  fn: (ctx: TContext, input: StateHookInput) => PatchLike | Promise<PatchLike>
+): void
+```
+
+---
+
+## `on(event, def)`
+
+Registers a flow (event-driven transition) on the current state. Must be called inside a `when()` setup function.
+
+```typescript
+function on<TContext>(event: string, def: OnDef<TContext>): void
 ```
 
 ### Parameters
 
-**`def`** `EdgeDef<TContext>`
+**`event`** `string`
 
-Edge definition:
+Event name that triggers this flow.
+
+**`def`** `OnDef<TContext>`
+
+Flow definition:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | `string` | Yes | ID of the target state |
 | `guard` | `(ctx: TContext, input: GuardInput) => boolean \| Promise<boolean>` | No | Guard predicate; transition is blocked when `false` |
-| `action` | `(ctx: TContext, input: TransitionActionInput) => PatchLike` | No | Context patch handler run during the transition |
+| `action` | `(ctx: TContext, input: OnActionInput) => PatchLike` | No | Context patch handler run during the transition |
 | `pipeline` | `Pipeline<TContext>` | No | Pipeline to run as part of the transition, after the action |
 | `metadata` | `Record<string, unknown>` | No | Arbitrary user-defined metadata |
-
-### Return value
-
-`EdgeDef<TContext>` — the same definition object, for inline use in `edges` maps.
 
 ### Example
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 type Ctx = { approved: boolean; approvedBy?: string };
 
 const approval = defineDomain<Ctx>('approval', () => {
-  state('pending', {
-    edges: {
-      APPROVE: edge({
-        target: 'approved',
-        guard: (ctx, { payload }) => payload != null,
-        action: (ctx, { payload }) => ({ approvedBy: payload as string }),
-      }),
-      REJECT: edge({ target: 'rejected' }),
-    },
+  when('pending', () => {
+    on('APPROVE', {
+      target: 'approved',
+      guard: (ctx, { payload }) => payload != null,
+      action: (ctx, { payload }) => ({ approvedBy: payload as string }),
+    });
+    on('REJECT', { target: 'rejected' });
   });
-  state('approved', { terminal: true });
-  state('rejected', { terminal: true });
+  when('approved', terminal());
+  when('rejected', terminal());
   return { context: { approved: false }, initial: 'pending' };
 });
 ```
 
 ---
 
-## `node(id, def)`
+## `node(id, fn | terminal(fn?))`
 
 Registers a node in the current pipeline builder scope.
 
 ```typescript
-function node<TContext>(id: string, def: PipelineNodeDef<TContext>): void
+function node<TContext>(id: string, x: (() => void) | TerminalSentinel): void
 ```
 
 ### Parameters
@@ -122,16 +135,9 @@ function node<TContext>(id: string, def: PipelineNodeDef<TContext>): void
 
 Unique node identifier.
 
-**`def`** `PipelineNodeDef<TContext>`
+**`x`** `(() => void) | TerminalSentinel`
 
-Node definition:
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `action` | `(ctx: TContext, input: PipelineActionInput) => PatchLike` | No | Context patch handler for this node |
-| `forks` | `PipelineForkDef<TContext>[]` | No | Ordered list of fork conditions; first match wins |
-| `terminal` | `boolean` | No | When `true`, execution stops after this node |
-| `metadata` | `Record<string, unknown>` | No | Arbitrary user-defined metadata |
+Either a synchronous setup function that calls `action` and `fork` to configure the node, or the result of `terminal(fn?)` to register a terminal node with an optional final action.
 
 ### Return value
 
@@ -140,36 +146,46 @@ None (`void`).
 ### Example
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 type Ctx = { score: number; passed: boolean };
 
 const quiz = definePipeline<Ctx>('quiz', () => {
-  node('grade', {
-    action: async (ctx) => ({ score: 90 }),
-    forks: [
-      fork((ctx) => ctx.score >= 70, 'pass'),
-      fork((ctx) => ctx.score < 70, 'fail'),
-    ],
+  node('grade', () => {
+    action(async (ctx) => ({ score: 90 }));
+    fork((ctx) => ctx.score >= 70, 'pass');
+    fork((ctx) => ctx.score < 70, 'fail');
   });
-  node('pass', terminal({ action: async () => ({ passed: true }) }));
-  node('fail', terminal({ action: async () => ({ passed: false }) }));
+  node('pass', terminal(async () => ({ passed: true })));
+  node('fail', terminal(async () => ({ passed: false })));
   return { initial: 'grade' };
 });
 ```
 
 ---
 
+## `action(fn)`
+
+Registers the action handler for the current node. Must be called inside a `node()` setup function.
+
+```typescript
+function action<TContext>(
+  fn: (ctx: TContext, input: PipelineActionInput) => PatchLike | Promise<PatchLike>
+): void
+```
+
+---
+
 ## `fork(condition, target, options?)`
 
-Creates a `PipelineForkDef` for use in a node's `forks` array.
+Registers a forward transition on the current node in declaration order. Must be called inside a `node()` setup function.
 
 ```typescript
 function fork<TContext>(
   condition: ((ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>) | undefined,
   target: string | Pipeline<TContext>,
   options?: { label?: string; metadata?: Record<string, unknown> }
-): PipelineForkDef<TContext>
+): void
 ```
 
 ### Parameters
@@ -186,31 +202,18 @@ ID of the target node, or a sub-pipeline to embed.
 
 Optional label and metadata attached to the fork.
 
-### Return value
-
-`PipelineForkDef<TContext>`:
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `target` | `string \| Pipeline<TContext>` | Yes | ID of the target node, or a sub-pipeline |
-| `condition` | `(ctx: TContext, input: PipelineConditionInput) => boolean \| Promise<boolean>` | No | Fork predicate; `undefined` means unconditional |
-| `label` | `string` | No | Human-readable label for this fork path |
-| `metadata` | `Record<string, unknown>` | No | Arbitrary user-defined metadata |
-
 ### Example
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 type Ctx = { score: number };
 
 const pipeline = definePipeline<Ctx>('check', () => {
-  node('evaluate', {
-    forks: [
-      fork((ctx) => ctx.score >= 90, 'excellent', { label: 'high-score' }),
-      fork((ctx) => ctx.score >= 60, 'passing',   { label: 'passing' }),
-      fork(undefined, 'failing'),                 // unconditional fallback
-    ],
+  node('evaluate', () => {
+    fork((ctx) => ctx.score >= 90, 'excellent', { label: 'high-score' });
+    fork((ctx) => ctx.score >= 60, 'passing',   { label: 'passing' });
+    fork(undefined, 'failing');  // unconditional fallback
   });
   node('excellent', terminal());
   node('passing',   terminal());
@@ -221,41 +224,39 @@ const pipeline = definePipeline<Ctx>('check', () => {
 
 ---
 
-## `terminal(def?)`
+## `terminal(fn?)`
 
-Creates a `PipelineNodeDef` with `terminal: true`. Optionally accepts a partial node definition (excluding `terminal`).
+Returns a `TerminalSentinel` — a scope-independent branded value accepted as the second argument to `when()` and `node()`. Never throws `BUILDER_CLOSED`; safe to call at any scope level.
 
 ```typescript
 function terminal<TContext>(
-  def?: Omit<PipelineNodeDef<TContext>, 'terminal'>
-): PipelineNodeDef<TContext>
+  fn?: (ctx: TContext, input: PipelineActionInput) => PatchLike | Promise<PatchLike>
+): TerminalSentinel
 ```
 
 ### Parameters
 
-**`def`** `Omit<PipelineNodeDef<TContext>, 'terminal'>` *(optional)*
+**`fn`** *(optional)*
 
-Optional action, forks, and metadata for the terminal node.
+Optional final action that runs when a terminal **node** is reached (ignored for terminal states). Its patch is merged before the run completes.
 
 ### Return value
 
-`PipelineNodeDef<TContext>` with `terminal: true`.
+`TerminalSentinel` — a branded sentinel object.
 
 ### Example
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 type Ctx = { result: string };
 
 const pipeline = definePipeline<Ctx>('process', () => {
-  node('start', {
-    forks: [fork(undefined, 'finish')],
+  node('start', () => {
+    fork(undefined, 'finish');
   });
-  // terminal with an action that patches context before stopping
-  node('finish', terminal({
-    action: async (ctx) => ({ result: 'done' }),
-  }));
+  // terminal with a final action that patches context before stopping
+  node('finish', terminal(async (ctx) => ({ result: 'done' })));
   return { initial: 'start' };
 });
 ```

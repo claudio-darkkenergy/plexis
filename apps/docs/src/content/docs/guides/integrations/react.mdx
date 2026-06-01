@@ -31,7 +31,7 @@ The hook plugs into any component. Define a domain once outside the component tr
 
 ```typescript
 import React from 'react';
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 import { useSyncExternalStore } from 'react';
 import type { Domain, DomainSnapshot } from '@tde.io/plexis';
 
@@ -48,16 +48,10 @@ function useDomain<TContext extends object>(
 type ToggleCtx = { count: number };
 
 const toggle = defineDomain<ToggleCtx>('toggle', () => {
-  state('off', {
-    edges: { TOGGLE: edge({ target: 'on' }) },
+  when('off', () => {
+    on('TOGGLE', { target: 'on' });
   });
-  state('on', {
-    edges: {
-      TOGGLE: edge({ target: 'off' }),
-      RESET:  edge({ target: 'off', action: async () => ({ count: 0 }) }),
-    },
-    onEnter: async (ctx) => ({ count: ctx.count + 1 }),
-  });
+  when('on', () => {});
   return { context: { count: 0 }, initial: 'off' };
 });
 

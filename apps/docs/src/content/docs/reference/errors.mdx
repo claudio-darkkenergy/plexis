@@ -33,12 +33,14 @@ Plexis throws `PlexisError` for all runtime errors. It extends the native `Error
 ### Example
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 import type { PlexisError } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
-  state('pending', { edges: { SUBMIT: edge({ target: 'processing' }) } });
-  state('processing', { terminal: true });
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing' });
+  });
+  when('processing', terminal());
   return { context: {}, initial: 'pending', strict: true };
 });
 
@@ -69,11 +71,11 @@ try {
 ### Example: catching `BUILDER_CLOSED`
 
 ```typescript
-import { state } from '@tde.io/plexis';
+import { when } from '@tde.io/plexis';
 import type { PlexisError } from '@tde.io/plexis';
 
 try {
-  state('orphan', {}); // called outside a setup function
+  when('orphan', () => {}); // called outside a setup function
 } catch (err) {
   const e = err as PlexisError;
   console.log(e.code); // 'BUILDER_CLOSED'
