@@ -1,5 +1,19 @@
 ## ADDED Requirements
 
+### Requirement: `action` inside a `node` setup receives `PipelineActionInput`
+
+Inside a `node` setup function, `action(fn)` SHALL register the node's action handler, and the handler SHALL receive `PipelineActionInput` (`nodeId`, `pipelineId`, `input`, `traceId`) as its `input` argument. The optional final action passed to `terminal(fn)` in a node context SHALL likewise receive `PipelineActionInput`. The same `action` export is scope-routed: in a `node` setup it registers a node action with `PipelineActionInput`; in an `on` setup it registers a transition action with `OnActionInput`.
+
+#### Scenario: node action receives PipelineActionInput
+
+- **WHEN** a `node('validate-card', () => { action((ctx, input) => ({ seen: input.nodeId })); ... })` setup is used and the pipeline runs to that node
+- **THEN** the registered action SHALL run with an `input` carrying `nodeId === 'validate-card'`, the owning `pipelineId`, the run `input`, and a `traceId`
+
+#### Scenario: terminal node final action receives PipelineActionInput
+
+- **WHEN** a node is declared with `node('charge', terminal((ctx, input) => ({ at: input.nodeId })))` and the runtime reaches it
+- **THEN** the final action SHALL run with an `input` carrying `nodeId === 'charge'` and its patch SHALL be merged before the run completes with `status: 'completed'`
+
 ### Requirement: Imperative pipeline authoring with `node`, `action`, and `fork`
 
 Nodes SHALL be declared inside a `definePipeline` setup function using `node(id, fn | terminal(fn?))`. When the second argument is a synchronous setup function, that function MAY call the scoped helpers `action(fn)` to register the node's action handler and `fork(condition, target, opts?)` to register conditional fork branches in declaration order. When the second argument is the value returned by `terminal(fn?)`, the node SHALL be registered as terminal, optionally carrying a final action `fn` and never declaring forks. There SHALL be no `forks: []` array key and no `action` object key.
