@@ -24,15 +24,13 @@ The project is in early implementation. So far:
 The public API uses setup functions with registration helpers instead of large config objects:
 
 ```ts
-import { defineDomain, definePipeline, state, edge, node, fork, terminal } from 'plexis';
+import { defineDomain, definePipeline, when, on, enter, exit, node, action, fork, terminal } from 'plexis';
 
 const payment = definePipeline('payment', () => {
-  node('validate-card', {
-    action: async (ctx) => ({ cardChecked: true }),
-    forks: [
-      fork((ctx) => ctx.cardValid, 'charge', { label: 'card-ok' }),
-      fork((ctx) => !ctx.cardValid, 'decline', { label: 'card-invalid' }),
-    ],
+  node('validate-card', () => {
+    action(async (ctx) => ({ cardChecked: true }));
+    fork((ctx) => ctx.cardValid, 'charge', { label: 'card-ok' });
+    fork((ctx) => !ctx.cardValid, 'decline', { label: 'card-invalid' });
   });
   node('charge', terminal());
   node('decline', terminal());
@@ -40,24 +38,22 @@ const payment = definePipeline('payment', () => {
 });
 
 const order = defineDomain('order', () => {
-  state('pending', {
-    edges: {
-      SUBMIT: edge({ target: 'processing', pipeline: payment }),
-    },
+  when('pending', () => {
+    on('SUBMIT', { target: 'processing', pipeline: payment });
   });
-  state('processing', { edges: {} });
-  state('done', { terminal: true });
+  when('processing', () => {});
+  when('done', terminal());
   return { context: { orderId: null }, initial: 'pending', strict: true };
 });
 ```
 
-**Key difference from the old API:** setup functions run synchronously at definition time. Registration helpers (`state`, `edge`, `node`, `fork`, `terminal`) operate on a builder scope opened by `defineDomain`/`definePipeline`. Calling them outside an active builder scope throws `PlexisError` with code `BUILDER_CLOSED`.
+**Key difference from the old API:** setup functions run synchronously at definition time. Domain helpers (`when`, `enter`, `exit`, `on`) and pipeline helpers (`node`, `action`, `fork`, `terminal`) operate on a nested builder-scope stack opened by `defineDomain`/`definePipeline`. Calling them outside an active builder scope throws `PlexisError` with code `BUILDER_CLOSED`.
 
 ## Architecture
 
 ### Two-layer model
 
-**Domain** — durable business state that persists across time. Has states, edges (transitions), guards, actions, lifecycle hooks (`onEnter`/`onExit`), attached pipelines, history, and subscriptions.
+**Domain** — durable business state that persists across time. Has states, flows (event-driven transitions declared with `on()`), guards, actions, lifecycle hooks (`enter`/`exit`), attached pipelines, history, and subscriptions.
 
 **Pipeline** — a finite workflow that runs once per invocation. Has nodes, fork conditions (ordered, first-match-wins), actions, terminal nodes, and sub-pipeline embedding. Execution follows fork targets from `initial`, not registration order.
 
@@ -78,11 +74,11 @@ Custom merge can be provided in `DefineDomainOptions` / `DefinePipelineOptions`.
 ### Domain execution order (on `follow(event, payload)`)
 
 1. Guard check — blocks if false, no side effects run
-2. `onExit` for current state
-3. Edge action
-4. Edge pipeline
+2. `exit` for current state
+3. Flow action
+4. Flow pipeline
 5. State transitions to target
-6. `onEnter` for target state
+6. `enter` for target state
 7. State entry pipeline
 8. History recorded, subscribers notified
 
@@ -102,8 +98,8 @@ Custom merge can be provided in `DefineDomainOptions` / `DefinePipelineOptions`.
 | `Domain<TContext, TEdges>` | Runtime domain instance interface |
 | `Pipeline<TContext>` | Runtime pipeline instance interface |
 | `DomainConfig` | Config shape for the internal builder |
-| `StateNodeDef` | Single state with edges, hooks, pipeline |
-| `EdgeDef` | Edge with guard, action, pipeline |
+| `WhenDef` | Single state with flows (`on`), hooks (`enter`/`exit`), pipeline |
+| `OnDef` | Flow with guard, action, pipeline |
 | `PipelineNodeDef` | Node with action, forks |
 | `PipelineForkDef` | Fork with condition, target, label |
 | `DomainFollowResult` | Return from `domain.follow()` |
@@ -112,13 +108,13 @@ Custom merge can be provided in `DefineDomainOptions` / `DefinePipelineOptions`.
 | `NodeInspection` | Node + paths + attached pipelines |
 | `PlexisError` | Typed error with `code`, `domainId`, `pipelineId` |
 
-### TypeScript edge inference
+### TypeScript flow inference
 
 Use `as const` to get typed `follow()` and `can()`:
 
 ```ts
 const order = defineDomain('order', () => {
-  state('pending', { edges: { SUBMIT: edge({ target: 'processing' }) } });
+  when('pending', () => { on('SUBMIT', { target: 'processing' }); });
   // ...
   return { context: {}, initial: 'pending' } as const;
 });

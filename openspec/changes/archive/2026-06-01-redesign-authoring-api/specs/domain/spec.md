@@ -24,6 +24,35 @@ States SHALL be declared inside a `defineDomain` setup function using `when(id, 
 - **WHEN** `terminal()` is invoked outside any active builder scope and its result is later passed as the second argument to `when('done', terminal())`
 - **THEN** `terminal()` SHALL NOT throw `BUILDER_CLOSED`, and `'done'` SHALL be registered as a terminal state
 
+### Requirement: Guard evaluation blocks flow traversal
+
+A guard declared on a flow via `on(event, { target, guard })` SHALL be evaluated before any side effects. A guard that returns a falsy value SHALL block traversal with no observable side effects.
+
+#### Scenario: Failing guard blocks the transition
+
+- **WHEN** a flow's guard returns `false`
+- **THEN** the `follow` result SHALL have `status: 'blocked'`, `to` SHALL be omitted, and no side effects from `exit`, the flow action, the flow pipeline, `enter`, or the state entry pipeline SHALL be observable
+
+### Requirement: Documented execution order on flow traversal
+
+On a successful `follow`, patches SHALL be merged in the documented order: `exit` (current state), flow action, flow pipeline, `enter` (target state), state entry pipeline.
+
+#### Scenario: Patches are applied in declared order
+
+- **WHEN** `exit` returns `{ a: 1 }`, the flow action returns `{ b: 2 }`, the flow pipeline produces `{ c: 3 }`, `enter` returns `{ a: 9 }`, and the state entry pipeline produces `{ d: 4 }`
+- **THEN** the resulting context SHALL contain `{ a: 9, b: 2, c: 3, d: 4 }` reflecting the documented merge order
+
+### Requirement: Lifecycle hooks `enter` and `exit`
+
+States MAY declare entry and exit hooks via `enter(fn)` and `exit(fn)` inside their `when` setup. The `enter` hook of the initial state SHALL run once at construction.
+
+#### Scenario: enter runs on initial state at construction
+
+- **WHEN** a Domain is constructed with `initial: 'pending'` and `'pending'` declares an `enter` hook
+- **THEN** the `enter` hook SHALL be invoked once at construction time and any returned patch SHALL be merged into the initial context
+
+## MODIFIED Requirements
+
 ### Requirement: Composable Domain construction with class equivalence
 
 The library SHALL expose `defineDomain(id, setup, options?)` and an equivalent `Domain` class constructor. The `setup` function SHALL run synchronously at definition time, registering states via `when` and event handlers via `on`. Calling scope-sensitive helpers outside an active setup scope SHALL throw `PlexisError` with `code === 'BUILDER_CLOSED'`.
@@ -62,33 +91,6 @@ The current state SHALL declare an outgoing flow for an event via `on(event, { t
 - **WHEN** the Domain is constructed with `strict: false` and `follow(unknownEvent)` is called
 - **THEN** the result SHALL have `status: 'ignored'`, the Domain's `state` SHALL be unchanged, and no error SHALL be thrown
 
-### Requirement: Guard evaluation blocks flow traversal
-
-A guard declared on a flow via `on(event, { target, guard })` SHALL be evaluated before any side effects. A guard that returns a falsy value SHALL block traversal with no observable side effects.
-
-#### Scenario: Failing guard blocks the transition
-
-- **WHEN** a flow's guard returns `false`
-- **THEN** the `follow` result SHALL have `status: 'blocked'`, `to` SHALL be omitted, and no side effects from `exit`, the flow action, the flow pipeline, `enter`, or the state entry pipeline SHALL be observable
-
-### Requirement: Documented execution order on flow traversal
-
-On a successful `follow`, patches SHALL be merged in the documented order: `exit` (current state), flow action, flow pipeline, `enter` (target state), state entry pipeline.
-
-#### Scenario: Patches are applied in declared order
-
-- **WHEN** `exit` returns `{ a: 1 }`, the flow action returns `{ b: 2 }`, the flow pipeline produces `{ c: 3 }`, `enter` returns `{ a: 9 }`, and the state entry pipeline produces `{ d: 4 }`
-- **THEN** the resulting context SHALL contain `{ a: 9, b: 2, c: 3, d: 4 }` reflecting the documented merge order
-
-### Requirement: Lifecycle hooks `enter` and `exit`
-
-States MAY declare entry and exit hooks via `enter(fn)` and `exit(fn)` inside their `when` setup. The `enter` hook of the initial state SHALL run once at construction.
-
-#### Scenario: enter runs on initial state at construction
-
-- **WHEN** a Domain is constructed with `initial: 'pending'` and `'pending'` declares an `enter` hook
-- **THEN** the `enter` hook SHALL be invoked once at construction time and any returned patch SHALL be merged into the initial context
-
 ### Requirement: `can` introspection
 
 `can(event)` SHALL report whether the current state can follow `event`, evaluating any guard declared on the matching flow.
@@ -103,52 +105,19 @@ States MAY declare entry and exit hooks via `enter(fn)` and `exit(fn)` inside th
 - **WHEN** the current state declares a flow for `event` with a guard that returns `false`
 - **THEN** `can(event)` SHALL return `false` and the Domain's state SHALL remain unchanged
 
-### Requirement: `followFrom` asserts current state
+## REMOVED Requirements
 
-`domain.followFrom(expectedState, event, payload?)` SHALL throw `PlexisError` with code `STATE_MISMATCH` if the Domain's current state is not equal to `expectedState`. Otherwise it SHALL behave identically to `follow(event, payload)`.
+### Requirement: Guard evaluation blocks edge traversal
 
-#### Scenario: State mismatch throws STATE_MISMATCH
+**Reason**: Renamed to "Guard evaluation blocks flow traversal" — the domain-transition concept is now authored with `on(...)` and referred to as a flow; the guard semantics are unchanged.
+**Migration**: Declare guards via `on(event, { target, guard })` inside a `when` setup; behavior is identical.
 
-- **WHEN** the Domain's current state is `'pending'` and `followFrom('processing', 'COMPLETE')` is called
-- **THEN** the call SHALL throw `PlexisError` with `code === 'STATE_MISMATCH'`, `domainId` matching the Domain id, and the actual and expected states recorded on the error
+### Requirement: Documented execution order on edge traversal
 
-### Requirement: Snapshot and restore
+**Reason**: Renamed to "Documented execution order on flow traversal" and re-worded for the new vocabulary (`exit`/flow action/flow pipeline/`enter`); the merge order is unchanged.
+**Migration**: No behavioral change — `onExit`→`exit`, edge action→flow action, edge pipeline→flow pipeline, `onEnter`→`enter`.
 
-`domain.snapshot()` SHALL return `{ state, context, historyLength }`. `domain.restore(snapshot)` SHALL replace the Domain's state and context with the snapshot's values and SHALL NOT replay any history events.
+### Requirement: Lifecycle hooks `onEnter` and `onExit`
 
-#### Scenario: Restore returns the Domain to a captured state
-
-- **WHEN** a snapshot is captured, the Domain transitions, and `restore(snapshot)` is called
-- **THEN** `domain.state` and `domain.context` SHALL match the snapshot exactly
-
-### Requirement: Subscriptions
-
-`domain.subscribe(listener)` SHALL register a listener that is invoked with the Domain's current snapshot after each successful `follow`. It SHALL return an unsubscribe function. Listener exceptions SHALL NOT halt the Domain; they SHALL be reported via the configured error sink (if any) and other listeners SHALL still be notified.
-
-#### Scenario: Listener receives snapshot after transition
-
-- **WHEN** a listener is subscribed and `follow('SUBMIT')` succeeds
-- **THEN** the listener SHALL be invoked exactly once with the post-transition snapshot
-
-#### Scenario: Listener throwing does not break subsequent listeners
-
-- **WHEN** two listeners are subscribed and the first throws
-- **THEN** the second listener SHALL still be invoked and the Domain's state SHALL still be the post-transition value
-
-### Requirement: History tracking
-
-`domain.history()` SHALL return the chronological array of `DomainHistoryEntry` records, one per successful `follow`, each containing `from`, `to`, `event`, optional `payload`, post-transition `context`, `timestamp`, and `traceId`.
-
-#### Scenario: History records each successful transition
-
-- **WHEN** three successful `follow` calls have occurred
-- **THEN** `domain.history()` SHALL return three entries in the order they occurred
-
-### Requirement: Terminal states
-
-A state declared with `terminal: true` SHALL accept no outgoing edges. `follow` against a terminal state SHALL return `status: 'ignored'` in non-strict mode or throw `UNKNOWN_EVENT` in strict mode.
-
-#### Scenario: Terminal state ignores follow in non-strict mode
-
-- **WHEN** the Domain is in a terminal state with `strict: false` and `follow('ANY_EVENT')` is called
-- **THEN** the result SHALL be `status: 'ignored'` and the state SHALL remain terminal
+**Reason**: Renamed to "Lifecycle hooks `enter` and `exit`" — hooks are now registered with the scoped `enter(fn)`/`exit(fn)` helpers instead of `onEnter`/`onExit` object keys.
+**Migration**: Replace `onEnter: fn` with `enter(fn)` and `onExit: fn` with `exit(fn)` inside the `when` setup.
