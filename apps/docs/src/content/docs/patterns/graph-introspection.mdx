@@ -12,10 +12,10 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', () => {
-    on('FULFILL', { target: 'fulfilled' });
+    on('fulfill', { target: 'fulfilled' });
   });
   when('fulfilled', terminal());
   return { context: {}, initial: 'pending' };
@@ -36,7 +36,7 @@ console.log(descriptor.nodes.map((n) => n.id));
 // ['pending', 'processing', 'fulfilled']
 
 console.log(descriptor.edges.map((e) => `${e.from.nodeId} --${e.event}--> ${e.to.nodeId}`));
-// ['pending --SUBMIT--> processing', 'processing --FULFILL--> fulfilled']
+// ['pending --submit--> processing', 'processing --fulfill--> fulfilled']
 ```
 
 ## Inspecting individual nodes
@@ -51,7 +51,7 @@ const node = order.graph.node('processing');
 `domain.graph.inbound(id)` and `domain.graph.outbound(id)` return the edges that arrive at or depart from a node:
 
 ```typescript
-const inbound  = order.graph.inbound('processing');
+const inbound = order.graph.inbound('processing');
 // edges where to.nodeId === 'processing' → [the SUBMIT edge]
 
 const outbound = order.graph.outbound('processing');
@@ -87,8 +87,8 @@ import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 const process = definePipeline('process', () => {
   node('validate', () => {
-    fork((ctx);
-    fork((ctx);
+    fork((ctx) => ctx.valid, 'accept');
+    fork((ctx) => !ctx.valid, 'reject');
   });
   node('accept', terminal());
   node('reject', terminal());
@@ -105,7 +105,7 @@ console.log(g.terminalNodes.map((n) => n.nodeId));
 `domain.graph` also exposes `observedPathsTo(id)` and `observedPathsFrom(id)`, which return only paths the domain has actually traversed at runtime (based on the tracer). These are useful for coverage analysis and debugging.
 
 ```typescript
-await order.follow('SUBMIT');
+await order.follow('submit');
 
 const observed = order.graph.observedPathsFrom('pending');
 // returns the actual path taken so far

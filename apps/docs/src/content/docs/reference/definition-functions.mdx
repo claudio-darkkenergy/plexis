@@ -56,10 +56,10 @@ type OrderContext = { orderId: string | null; total: number };
 
 const order = defineDomain<OrderContext>('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', () => {
-    on('FULFILL', { target: 'fulfilled' });
+    on('fulfill', { target: 'fulfilled' });
   });
   when('fulfilled', terminal());
 

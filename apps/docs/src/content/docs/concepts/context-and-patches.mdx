@@ -16,7 +16,7 @@ type OrderCtx = { orderId: string; total: number; paid: boolean };
 
 const order = defineDomain<OrderCtx>('order', () => {
   when('pending', () => {
-    on('PAY', {
+    on('pay', {
       target: 'paid',
       action: async (ctx) => ({ paid: true }),
     });
@@ -31,7 +31,7 @@ const order = defineDomain<OrderCtx>('order', () => {
 
 console.log(order.context.paid);  // false
 
-await order.follow('PAY');
+await order.follow('pay');
 
 console.log(order.context.paid);  // true
 console.log(order.context.total); // 99 — unchanged keys are preserved

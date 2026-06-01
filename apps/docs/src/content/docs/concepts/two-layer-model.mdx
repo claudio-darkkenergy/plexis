@@ -14,11 +14,11 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', () => {
-    on('FULFILL', { target: 'fulfilled' });
-    on('CANCEL',  { target: 'cancelled' });
+    on('fulfill', { target: 'fulfilled' });
+    on('cancel', { target: 'cancelled' });
   });
   when('fulfilled', terminal());
   when('cancelled', terminal());
@@ -27,8 +27,8 @@ const order = defineDomain('order', () => {
 });
 
 // Later — same domain instance, multiple events over time
-await order.follow('SUBMIT');   // pending → processing
-await order.follow('FULFILL'); // processing → fulfilled
+await order.follow('submit');   // pending → processing
+await order.follow('fulfill'); // processing → fulfilled
 ```
 
 The domain retains its state between operations. `order.state` is `'fulfilled'` after both calls, and `order.history()` records the full path.
@@ -43,10 +43,10 @@ import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 const validatePayment = definePipeline('validate-payment', () => {
   node('check-card', () => {
     action(async (ctx) => ({ checked: true }));
-    fork((ctx) => ctx.cardValid,  'charge',  { label: 'valid' });
+    fork((ctx) => ctx.cardValid, 'charge', { label: 'valid' });
     fork((ctx) => !ctx.cardValid, 'decline', { label: 'invalid' });
   });
-  node('charge',  terminal());
+  node('charge', terminal());
   node('decline', terminal());
 
   return { initial: 'check-card' };
@@ -54,7 +54,7 @@ const validatePayment = definePipeline('validate-payment', () => {
 
 const result = await validatePayment.run({ cardValid: true });
 // result.finalNode === 'charge'
-// result.status   === 'completed'
+// result.status === 'completed'
 ```
 
 Each `run()` is isolated. There is no "current state" on the pipeline — context flows in, a result comes out.
@@ -88,7 +88,7 @@ const chargeCard = definePipeline('charge-card', () => {
 
 const checkout = defineDomain('checkout', () => {
   when('cart', () => {
-    on('CHECKOUT', { target: 'processing', pipeline: chargeCard });
+    on('checkout', { target: 'processing', pipeline: chargeCard });
   });
   when('processing', terminal());
   return { context: {}, initial: 'cart' };

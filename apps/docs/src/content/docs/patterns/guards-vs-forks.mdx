@@ -7,7 +7,7 @@ Guards and forks both involve a boolean condition, but they live at different la
 
 ## Guards — blocking a domain transition
 
-A guard lives on an edge (`EdgeDef.guard`) and is evaluated before any side effects run. If it returns `false`, the event is blocked: no `exit`, no action, no pipeline, no state change, no history entry. The domain stays exactly where it was.
+A guard lives on a flow (`OnDef.guard`) and is evaluated before any side effects run. If it returns `false`, the event is blocked: no `exit`, no action, no pipeline, no state change, no history entry. The domain stays exactly where it was.
 
 ```typescript
 import { defineDomain, when, on, terminal } from '@tde.io/plexis';
@@ -16,15 +16,17 @@ type Ctx = { balance: number; amount: number };
 
 const account = defineDomain<Ctx>('account', () => {
   when('open', () => {
-    on('WITHDRAW', { target: 'open',
-        // Guard: block the transition entirely if there are insufficient funds
-        guard: async (ctx) => ctx.balance >= ctx.amount,
-        action: async (ctx) => ({ balance: ctx.balance - ctx.amount });
+    on('withdraw', {
+      target: 'open',
+      // Guard: block the transition entirely if there are insufficient funds
+      guard: async (ctx) => ctx.balance >= ctx.amount,
+      action: async (ctx) => ({ balance: ctx.balance - ctx.amount }),
+    });
   });
   return { context: { balance: 100, amount: 0 }, initial: 'open' };
 });
 
-const result = await account.follow('WITHDRAW');
+const result = await account.follow('withdraw');
 // result.status === 'blocked' — guard returned false, nothing ran
 ```
 
@@ -42,10 +44,10 @@ type Ctx = { amount: number; fundsSufficient: boolean };
 const process = definePipeline<Ctx>('process', () => {
   node('check-funds', () => {
     action(async (ctx) => ({ fundsSufficient: ctx.amount <= 100 }));
-    fork((ctx);
-    fork((ctx);
+    fork((ctx) => ctx.fundsSufficient, 'charge');
+    fork((ctx) => !ctx.fundsSufficient, 'decline');
   });
-  node('charge',  terminal());
+  node('charge', terminal());
   node('decline', terminal());
   return { initial: 'check-funds' };
 });
@@ -53,7 +55,7 @@ const process = definePipeline<Ctx>('process', () => {
 const result = await process.run({ amount: 150, fundsSufficient: false });
 // Pipeline always runs to a terminal — it routes to 'decline', not blocked
 // result.finalNode === 'decline'
-// result.status    === 'completed'
+// result.status === 'completed'
 ```
 
 ## Choosing between them
@@ -91,10 +93,12 @@ const charge = definePipeline<Ctx>('charge', () => {
 
 const account = defineDomain<Ctx>('account', () => {
   when('open', () => {
-    on('WITHDRAW', { target: 'open',
-        guard: async (ctx) => ctx.balance >= ctx.amount, // blocks if insufficient
-        pipeline: charge,                                 // runs if guard passes
-        action: async (ctx) => ({ balance: ctx.balance - ctx.amount });
+    on('withdraw', {
+      target: 'open',
+      guard: async (ctx) => ctx.balance >= ctx.amount, // blocks if insufficient
+      pipeline: charge, // runs if guard passes
+      action: async (ctx) => ({ balance: ctx.balance - ctx.amount }),
+    });
   });
   return {
     context: { balance: 100, amount: 50, charged: false },
@@ -103,4 +107,4 @@ const account = defineDomain<Ctx>('account', () => {
 });
 ```
 
-For full type signatures, see [EdgeDef in the Definition Functions reference](/reference/definition-functions) and [PipelineForkDef in the Registration Helpers reference](/reference/registration-helpers).
+For full type signatures, see [OnDef in the Registration Helpers reference](/reference/registration-helpers#on) and [PipelineForkDef in the Registration Helpers reference](/reference/registration-helpers#fork).

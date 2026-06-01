@@ -20,9 +20,15 @@ type CheckoutCtx = {
 
 const validateShipping = definePipeline<CheckoutCtx>('validate-shipping', () => {
   node('check', () => {
-    action(async (ctx) => {);
-    fork((ctx);
-    fork(();
+    action(async (ctx) => {
+      const s = ctx.shipping;
+      if (!s?.address || !s?.city || !s?.zip) {
+        return { error: 'Shipping address required' };
+      }
+      return { error: undefined };
+    });
+    fork((ctx) => !!ctx.error, 'fail');
+    fork(undefined, 'pass');
   });
   node('fail', terminal());
   node('pass', terminal());
@@ -31,9 +37,15 @@ const validateShipping = definePipeline<CheckoutCtx>('validate-shipping', () => 
 
 const validatePayment = definePipeline<CheckoutCtx>('validate-payment', () => {
   node('check', () => {
-    action(async (ctx) => {);
-    fork((ctx);
-    fork(();
+    action(async (ctx) => {
+      const p = ctx.payment;
+      if (!p?.card || !p?.expiry) {
+        return { error: 'Payment details required' };
+      }
+      return { error: undefined };
+    });
+    fork((ctx) => !!ctx.error, 'fail');
+    fork(undefined, 'pass');
   });
   node('fail', terminal());
   node('pass', terminal());
@@ -52,12 +64,12 @@ const checkout = defineDomain<CheckoutCtx>('checkout', () => {
   when('shipping', () => {});
 
   when('payment', () => {
-    on('BACK', { target: 'shipping' });
+    on('back', { target: 'shipping' });
   });
 
   when('review', () => {
-    on('CONFIRM', { target: 'confirmed' });
-    on('BACK', { target: 'payment' });
+    on('confirm', { target: 'confirmed' });
+    on('back', { target: 'payment' });
   });
 
   when('confirmed', terminal());
@@ -70,12 +82,12 @@ const checkout = defineDomain<CheckoutCtx>('checkout', () => {
 
 ```typescript
 // Try to advance without submitting data — guard rejects
-const blocked = await checkout.follow('NEXT');
+const blocked = await checkout.follow('next');
 console.log(blocked.status); // 'blocked' — domain stays on 'shipping'
 console.log(checkout.state); // 'shipping'
 
 // Submit valid shipping data
-const step1 = await checkout.follow('NEXT', {
+const step1 = await checkout.follow('next', {
   address: '1 Main St',
   city: 'Springfield',
   zip: '12345',
@@ -84,11 +96,11 @@ console.log(step1.status); // 'followed'
 console.log(checkout.state); // 'payment'
 
 // Try to advance without payment data
-const blocked2 = await checkout.follow('NEXT');
+const blocked2 = await checkout.follow('next');
 console.log(blocked2.status); // 'blocked' — domain stays on 'payment'
 
 // Submit valid payment data
-const step2 = await checkout.follow('NEXT', {
+const step2 = await checkout.follow('next', {
   card: '4111111111111111',
   expiry: '12/28',
 });
@@ -96,7 +108,7 @@ console.log(step2.status); // 'followed'
 console.log(checkout.state); // 'review'
 
 // Confirm the order
-const step3 = await checkout.follow('CONFIRM');
+const step3 = await checkout.follow('confirm');
 console.log(step3.status); // 'followed'
 console.log(checkout.state); // 'confirmed'
 ```

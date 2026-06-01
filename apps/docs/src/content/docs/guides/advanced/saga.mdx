@@ -26,41 +26,44 @@ const fulfillOrder = definePipeline<FulfillCtx>('fulfill-order', () => {
 
   // ── Step 1: Reserve inventory ───────────────────────────────────────────────
   node('reserve-inventory', () => {
-    action(async (ctx) => {);
-    fork((ctx);
-    fork(undefined,                       'saga-failed-no-stock', { label: 'no-stock' });
+    action(async (ctx) => ({ inventoryReserved: true }));
+    fork((ctx) => ctx.inventoryReserved, 'charge-card', { label: 'reserved' });
+    fork(undefined, 'saga-failed-no-stock', { label: 'no-stock' });
   });
 
   // ── Step 2: Charge the card ─────────────────────────────────────────────────
   node('charge-card', () => {
-    action(async (ctx) => {);
-    fork((ctx);
-    fork(undefined,                       'compensate-release-inventory', { label: 'charge-failed' });
+    action(async (ctx) => ({ chargeId: 'ch_001' }));
+    fork((ctx) => !!ctx.chargeId, 'ship-order', { label: 'charged' });
+    fork(undefined, 'compensate-release-inventory', { label: 'charge-failed' });
   });
 
   // ── Step 3: Ship the order ──────────────────────────────────────────────────
   node('ship-order', () => {
-    action(async (ctx) => {);
-    fork((ctx);
-    fork((ctx);
-    fork(undefined,                          'compensate-refund-and-release', { label: 'shipping-failed' });
+    action(async (ctx) => ({
+      shipAttempts: ctx.shipAttempts + 1,
+      shipped: ctx.shipAttempts >= 2,
+    }));
+    fork((ctx) => ctx.shipped, 'saga-complete', { label: 'shipped' });
+    fork((ctx) => ctx.shipAttempts < 3, 'ship-order', { label: 'retry' });
+    fork(undefined, 'compensate-refund-and-release', { label: 'shipping-failed' });
   });
 
   // ── Compensation: release inventory (charge never happened) ─────────────────
   node('compensate-release-inventory', () => {
-    action(async (ctx) => {);
+    action(async (ctx) => ({ inventoryReserved: false }));
     fork(undefined, 'saga-compensated');
   });
 
   // ── Compensation: refund + release (charge succeeded, shipping failed) ───────
   node('compensate-refund-and-release', () => {
-    action(async (ctx) => {);
+    action(async (ctx) => ({ chargeId: null, inventoryReserved: false }));
     fork(undefined, 'saga-compensated');
   });
 
   // ── Terminals ───────────────────────────────────────────────────────────────
-  node('saga-complete',       terminal());
-  node('saga-compensated',    terminal());
+  node('saga-complete', terminal());
+  node('saga-compensated', terminal());
   node('saga-failed-no-stock', terminal());
 
   return { initial: 'reserve-inventory' };

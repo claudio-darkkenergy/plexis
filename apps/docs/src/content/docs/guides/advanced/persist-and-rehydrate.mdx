@@ -27,15 +27,15 @@ type CheckoutCtx = {
 function createCheckoutDomain() {
   return defineDomain<CheckoutCtx>('checkout', () => {
     when('cart', () => {
-      on('SET_SHIPPING', { target: 'address' });
+      on('setShipping', { target: 'address' });
     });
     when('address', () => {
-      on('SET_PAYMENT', { target: 'payment' });
-      on('BACK', { target: 'cart' });
+      on('setPayment', { target: 'payment' });
+      on('back', { target: 'cart' });
     });
     when('payment', () => {
-      on('CONFIRM', { target: 'confirmed' });
-      on('BACK', { target: 'address' });
+      on('confirm', { target: 'confirmed' });
+      on('back', { target: 'address' });
     });
     when('confirmed', terminal());
 
@@ -122,15 +122,15 @@ async function handleCheckoutRequest(req: Request): Promise<Response> {
 
 ```typescript
 // Request 1: Start the checkout (domain starts in 'cart', no prior snapshot)
-await handleCheckoutRequest({ orderId: 'ord_1', event: 'SET_SHIPPING' });
+await handleCheckoutRequest({ orderId: 'ord_1', event: 'setShipping' });
 // domain state: 'address', saved to DB
 
 // Request 2: On a different function instance — domain is reconstructed from DB
-await handleCheckoutRequest({ orderId: 'ord_1', event: 'SET_PAYMENT' });
+await handleCheckoutRequest({ orderId: 'ord_1', event: 'setPayment' });
 // domain restored to 'address', transitions to 'payment', saved to DB
 
 // Request 3: Confirm the order
-await handleCheckoutRequest({ orderId: 'ord_1', event: 'CONFIRM' });
+await handleCheckoutRequest({ orderId: 'ord_1', event: 'confirm' });
 // domain restored to 'payment', transitions to 'confirmed', saved to DB
 ```
 

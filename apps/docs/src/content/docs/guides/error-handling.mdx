@@ -19,7 +19,7 @@ For most applications, wrap `follow()` and `run()` in a try/catch:
 import { PlexisError } from '@tde.io/plexis';
 
 try {
-  const result = await order.follow('SUBMIT');
+  const result = await order.follow('submit');
 } catch (err) {
   if (err instanceof PlexisError) {
     console.error(`[${err.code}] ${err.message}`);

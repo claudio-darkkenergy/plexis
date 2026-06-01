@@ -49,7 +49,7 @@ type ToggleCtx = { count: number };
 
 const toggle = defineDomain<ToggleCtx>('toggle', () => {
   when('off', () => {
-    on('TOGGLE', { target: 'on' });
+    on('toggle', { target: 'on' });
   });
   when('on', () => {});
   return { context: { count: 0 }, initial: 'off' };
@@ -62,11 +62,11 @@ function ToggleButton() {
   return (
     <div>
       <p>State: {state} (toggled {context.count} times)</p>
-      <button onClick={() => toggle.follow('TOGGLE')}>
+      <button onClick={() => toggle.follow('toggle')}>
         {state === 'off' ? 'Turn on' : 'Turn off'}
       </button>
       {state === 'on' && (
-        <button onClick={() => toggle.follow('RESET')}>Reset</button>
+        <button onClick={() => toggle.follow('reset')}>Reset</button>
       )}
     </div>
   );

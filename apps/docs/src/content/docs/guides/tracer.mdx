@@ -35,7 +35,7 @@ const tracer = createTracer();
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', terminal());
   return { context: {}, initial: 'pending' } as const;
@@ -74,7 +74,7 @@ const unsub = tracer.subscribe((event) => {
   console.log(`[${event.level}] ${event.type} — ${event.status}`);
 });
 
-await order.follow('SUBMIT');
+await order.follow('submit');
 
 unsub(); // stop listening
 ```

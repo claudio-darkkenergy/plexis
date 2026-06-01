@@ -58,7 +58,7 @@ type ToggleCtx = { count: number };
 
 const toggle = defineDomain<ToggleCtx>('toggle', () => {
   when('off', () => {
-    on('TOGGLE', { target: 'on' });
+    on('toggle', { target: 'on' });
   });
   when('on', () => {});
   return { context: { count: 0 }, initial: 'off' };
@@ -73,7 +73,7 @@ const ToggleButton = defineComponent({
         h('p', `State: ${state.value} (toggled ${context.value.count} times)`),
         h(
           'button',
-          { onClick: () => toggle.follow('TOGGLE') },
+          { onClick: () => toggle.follow('toggle') },
           state.value === 'off' ? 'Turn on' : 'Turn off',
         ),
       ]);

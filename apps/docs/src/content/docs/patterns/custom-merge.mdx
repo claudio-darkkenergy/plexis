@@ -21,7 +21,7 @@ const order = defineDomain<Ctx>('order', () => {
   };
 });
 
-await order.follow('PAY');
+await order.follow('pay');
 console.log(order.context.flags);
 // { paid: true }  ← shipped is gone — shallow merge replaced flags entirely
 ```
@@ -57,7 +57,7 @@ const order = defineDomain<Ctx>(
   },
 );
 
-await order.follow('PAY');
+await order.follow('pay');
 console.log(order.context.flags);
 // { paid: true, shipped: false }  ← shipped is preserved
 ```
@@ -75,8 +75,10 @@ const cart = defineDomain<Ctx>(
   'cart',
   () => {
     when('open', () => {
-      on('ADD', { target: 'open',
-          action: async (ctx, { payload });
+      on('add', {
+        target: 'open',
+        action: async (ctx, { payload }) => ({ items: [payload as string] }),
+      });
     });
     return { context: { items: [] }, initial: 'open' };
   },
@@ -91,8 +93,8 @@ const cart = defineDomain<Ctx>(
   },
 );
 
-await cart.follow('ADD', 'book');
-await cart.follow('ADD', 'pen');
+await cart.follow('add', 'book');
+await cart.follow('add', 'pen');
 console.log(cart.context.items); // ['book', 'pen']
 ```
 

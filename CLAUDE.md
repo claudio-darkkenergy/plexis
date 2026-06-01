@@ -39,7 +39,7 @@ const payment = definePipeline('payment', () => {
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing', pipeline: payment });
+    on('submit', { target: 'processing', pipeline: payment });
   });
   when('processing', () => {});
   when('done', terminal());
@@ -114,13 +114,13 @@ Use `as const` to get typed `follow()` and `can()`:
 
 ```ts
 const order = defineDomain('order', () => {
-  when('pending', () => { on('SUBMIT', { target: 'processing' }); });
+  when('pending', () => { on('submit', { target: 'processing' }); });
   // ...
   return { context: {}, initial: 'pending' } as const;
 });
 
-await order.follow('SUBMIT');   // OK
-await order.follow('CANCEL');   // TypeScript error
+await order.follow('submit'); // OK
+await order.follow('cancel'); // TypeScript error
 ```
 
 ## Specification Reference

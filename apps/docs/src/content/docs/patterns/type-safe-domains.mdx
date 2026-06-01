@@ -12,14 +12,14 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', terminal());
   return { context: {}, initial: 'pending' };
 });
 
 // No error — TEdges defaults to string
-await order.follow('TYPO_EVENT');
+await order.follow('typoEvent');
 ```
 
 The domain will return `status: 'ignored'` at runtime, but TypeScript won't catch it.
@@ -31,12 +31,12 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
-    on('CANCEL', { target: 'cancelled' });
+    on('submit', { target: 'processing' });
+    on('cancel', { target: 'cancelled' });
   });
   when('processing', () => {
-    on('FULFILL', { target: 'fulfilled' });
-    on('CANCEL', { target: 'cancelled' });
+    on('fulfill', { target: 'fulfilled' });
+    on('cancel', { target: 'cancelled' });
   });
   when('fulfilled', terminal());
   when('cancelled', terminal());
@@ -46,12 +46,12 @@ const order = defineDomain('order', () => {
   //  as const narrows the return type so TypeScript can infer the edge keys
 });
 
-await order.follow('SUBMIT');   // OK
-await order.follow('FULFILL');  // OK
-await order.follow('CANCEL');   // OK
+await order.follow('submit'); // OK
+await order.follow('fulfill'); // OK
+await order.follow('cancel'); // OK
 
-// @ts-expect-error — 'TYPO' is not a known event
-await order.follow('TYPO');
+// @ts-expect-error — 'typo' is not a known event
+await order.follow('typo');
 ```
 
 `as const` tells TypeScript to keep string literal types rather than widening them to `string`. The `defineDomain` generic infers `TEdges` from the setup return, and `follow(event: TEdges)` then only accepts valid literals.
@@ -62,11 +62,11 @@ await order.follow('TYPO');
 
 ```typescript
 // Both are typed as boolean | Promise<boolean>
-const canSubmit  = await order.can('SUBMIT');   // OK
-const canFulfill = await order.can('FULFILL');  // OK
+const canSubmit = await order.can('submit'); // OK
+const canFulfill = await order.can('fulfill'); // OK
 
 // @ts-expect-error
-const canFoo = await order.can('FOO');
+const canFoo = await order.can('foo');
 ```
 
 ## Explicit generic for extra safety
@@ -75,17 +75,17 @@ For the strictest setup, pass the context type and constrain the edge type expli
 
 ```typescript
 type OrderCtx = { orderId: string };
-type OrderEvent = 'SUBMIT' | 'CANCEL' | 'FULFILL';
+type OrderEvent = 'submit' | 'cancel' | 'fulfill';
 
 const order = defineDomain<OrderCtx, OrderEvent>('order', () => {
   // TypeScript will error if you declare an edge that is not in OrderEvent
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
-    on('CANCEL', { target: 'cancelled' });
+    on('submit', { target: 'processing' });
+    on('cancel', { target: 'cancelled' });
   });
   when('processing', () => {
-    on('FULFILL', { target: 'fulfilled' });
-    on('CANCEL', { target: 'cancelled' });
+    on('fulfill', { target: 'fulfilled' });
+    on('cancel', { target: 'cancelled' });
   });
   when('fulfilled', terminal());
   when('cancelled', terminal());
@@ -97,7 +97,7 @@ Explicit generics also make the domain type clear when you pass it to a function
 
 ```typescript
 function submitOrder(d: import('@tde.io/plexis').Domain<OrderCtx, OrderEvent>) {
-  return d.follow('SUBMIT');
+  return d.follow('submit');
 }
 ```
 

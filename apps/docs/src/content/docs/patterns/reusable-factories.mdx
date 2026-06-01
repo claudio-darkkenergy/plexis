@@ -15,11 +15,11 @@ type OrderCtx = { orderId: string; userId: string; total: number };
 function createOrderDomain(orderId: string, userId: string) {
   return defineDomain<OrderCtx>('order', () => {
     when('pending', () => {
-      on('SUBMIT', { target: 'processing' });
-      on('CANCEL', { target: 'cancelled' });
+      on('submit', { target: 'processing' });
+      on('cancel', { target: 'cancelled' });
     });
     when('processing', () => {
-      on('FULFILL', { target: 'fulfilled' });
+      on('fulfill', { target: 'fulfilled' });
     });
     when('fulfilled', terminal());
     when('cancelled', terminal());
@@ -35,10 +35,10 @@ function createOrderDomain(orderId: string, userId: string) {
 const orderA = createOrderDomain('ord_1', 'user_1');
 const orderB = createOrderDomain('ord_2', 'user_2');
 
-await orderA.follow('SUBMIT');
+await orderA.follow('submit');
 
-console.log(orderA.state);  // 'processing'
-console.log(orderB.state);  // 'pending' — independent
+console.log(orderA.state); // 'processing'
+console.log(orderB.state); // 'pending' — independent
 ```
 
 ## A pipeline factory
@@ -60,7 +60,7 @@ function createChargePipeline(maxAmount: number) {
       fork(undefined, 'done');
     });
     node('reject', terminal());
-    node('done',   terminal());
+    node('done', terminal());
 
     return { initial: 'validate' };
   });
@@ -70,13 +70,13 @@ function createChargePipeline(maxAmount: number) {
 const smallCharge = createChargePipeline(100);
 const largeCharge = createChargePipeline(10_000);
 
-const result1 = await smallCharge.run({ amount: 50,   currency: 'USD', charged: false });
-const result2 = await smallCharge.run({ amount: 500,  currency: 'USD', charged: false });
+const result1 = await smallCharge.run({ amount: 50, currency: 'USD', charged: false });
+const result2 = await smallCharge.run({ amount: 500, currency: 'USD', charged: false });
 const result3 = await largeCharge.run({ amount: 5000, currency: 'USD', charged: false });
 
-console.log(result1.finalNode); // 'done'   — within limit
+console.log(result1.finalNode); // 'done' — within limit
 console.log(result2.finalNode); // 'reject' — exceeds small limit
-console.log(result3.finalNode); // 'done'   — within large limit
+console.log(result3.finalNode); // 'done' — within large limit
 ```
 
 ## Sharing sub-pipelines across factory instances
@@ -95,7 +95,7 @@ const sendReceipt = definePipeline('send-receipt', () => {
 function createCheckout(storeId: string) {
   return defineDomain('checkout', () => {
     when('cart', () => {
-      on('PAY', { target: 'paid', pipeline: sendReceipt });
+      on('pay', { target: 'paid', pipeline: sendReceipt });
     });
     when('paid', terminal());
     return { context: { storeId }, initial: 'cart' };
@@ -114,8 +114,8 @@ TypeScript infers the return type of `defineDomain` and `definePipeline` from th
 ```typescript
 import type { Domain, Pipeline } from '@tde.io/plexis';
 
-function createOrderDomain(orderId: string): Domain<OrderCtx, 'SUBMIT' | 'CANCEL' | 'FULFILL'> {
-  return defineDomain<OrderCtx, 'SUBMIT' | 'CANCEL' | 'FULFILL'>('order', () => {
+function createOrderDomain(orderId: string): Domain<OrderCtx, 'submit' | 'cancel' | 'fulfill'> {
+  return defineDomain<OrderCtx, 'submit' | 'cancel' | 'fulfill'>('order', () => {
     // ...
     return { context: { orderId, userId: '', total: 0 }, initial: 'pending' };
   });

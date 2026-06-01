@@ -12,16 +12,16 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', () => {
-    on('SHIP', { target: 'shipped' });
+    on('ship', { target: 'shipped' });
   });
   when('shipped', terminal());
   return { context: { orderId: 'ord_1', items: 3 }, initial: 'pending' };
 });
 
-await order.follow('SUBMIT');
+await order.follow('submit');
 
 const snap = order.snapshot();
 // snap === { state: 'processing', context: { orderId: 'ord_1', items: 3 }, historyLength: 1 }
@@ -34,18 +34,18 @@ const snap = order.snapshot();
 ```typescript
 const order2 = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', () => {
-    on('SHIP', { target: 'shipped' });
+    on('ship', { target: 'shipped' });
   });
   when('shipped', terminal());
   return { context: { orderId: '', items: 0 }, initial: 'pending' };
 });
 
 order2.restore(snap);
-console.log(order2.state);            // 'processing'
-console.log(order2.context.orderId);  // 'ord_1'
+console.log(order2.state); // 'processing'
+console.log(order2.context.orderId); // 'ord_1'
 ```
 
 `restore()` sets the domain's current state and context to the snapshot values and resets the history length counter. The domain can then follow events from the restored point.
@@ -71,7 +71,11 @@ To avoid this, version your snapshots alongside your domain definitions. If the 
 
 ```typescript
 type SnapV1 = { state: string; context: { orderId: string }; historyLength: number };
-type SnapV2 = { state: string; context: { orderId: string; version: number }; historyLength: number };
+type SnapV2 = {
+  state: string;
+  context: { orderId: string; version: number };
+  historyLength: number;
+};
 
 function migrateSnapshot(v1: SnapV1): SnapV2 {
   return {

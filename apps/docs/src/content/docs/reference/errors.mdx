@@ -38,14 +38,14 @@ import type { PlexisError } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', terminal());
   return { context: {}, initial: 'pending', strict: true };
 });
 
 try {
-  await order.follow('CANCEL'); // no CANCEL edge + strict: true
+  await order.follow('cancel'); // no cancel edge + strict: true
 } catch (err) {
   const e = err as PlexisError;
   if (e.code === 'UNKNOWN_EVENT') {
@@ -59,7 +59,7 @@ try {
 
 ```typescript
 try {
-  await order.followFrom('processing', 'SUBMIT'); // domain is in 'pending'
+  await order.followFrom('processing', 'submit'); // domain is in 'pending'
 } catch (err) {
   const e = err as PlexisError;
   if (e.code === 'STATE_MISMATCH') {

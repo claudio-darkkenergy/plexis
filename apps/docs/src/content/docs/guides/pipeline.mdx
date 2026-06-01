@@ -22,11 +22,11 @@ const payment = definePipeline<PaymentContext>('payment', () => {
       const ok = ctx.cardValid && ctx.amount > 0;
       return { validated: ok };
     });
-    fork((ctx) => ctx.cardValid,  'charge',  { label: 'card-ok' });
+    fork((ctx) => ctx.cardValid, 'charge', { label: 'card-ok' });
     fork((ctx) => !ctx.cardValid, 'decline', { label: 'card-invalid' });
   });
 
-  node('charge',  terminal());
+  node('charge', terminal());
   node('decline', terminal());
 
   return { initial: 'validate' };
@@ -134,11 +134,11 @@ Pipelines compose with domains: pass a pipeline to a flow's `pipeline` option in
 import { defineDomain, when, on } from '@tde.io/plexis';
 
 when('pending', () => {
-  on('SUBMIT', { target: 'processing', pipeline: payment });
+  on('submit', { target: 'processing', pipeline: payment });
 });
 ```
 
-**Execution order on `follow('SUBMIT')`:**
+**Execution order on `follow('submit')`:**
 
 1. Guard check
 2. `exit` hook for `pending`

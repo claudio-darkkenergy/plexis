@@ -27,7 +27,7 @@ const workflow = defineDomain('workflow', () => {
       // Step 2 — runs when leaving 'draft'
       return { leftAt: 'draft' };
     });
-    on('SUBMIT', {
+    on('submit', {
       target: 'review',
       action: async (ctx) => {
         // Step 3 — ctx now has leftAt from exit
@@ -69,8 +69,8 @@ const process = definePipeline('process', () => {
     fork((ctx) => ctx.validated && ctx.amount > 0, 'charge', { label: 'valid' });
     fork((ctx) => !ctx.validated || ctx.amount <= 0, 'reject', { label: 'invalid' });
   });
-  node('charge',  terminal());
-  node('reject',  terminal());
+  node('charge', terminal());
+  node('reject', terminal());
 
   return { initial: 'validate' };
 });

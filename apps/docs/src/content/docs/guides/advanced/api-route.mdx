@@ -23,33 +23,36 @@ type RequestCtx = {
 
 const handleRequest = definePipeline<RequestCtx>('handle-request', () => {
   node('validate', () => {
-    action(async (ctx) => {);
-    fork((ctx);
-    fork((ctx);
+    action(async (ctx) => {
+      if (!ctx.body.data) return { error: 'Missing required field: data' };
+      return { userId: ctx.body.userId as string, validated: true };
+    });
+    fork((ctx) => !ctx.validated, 'error-response');
+    fork(undefined, 'service');
   });
 
   node('service', () => {
-    action(async (ctx) => {);
-    fork((ctx);
-    fork(();
+    action(async (ctx) => ({ recordId: `rec_${ctx.userId}` }));
+    fork((ctx) => !!ctx.error, 'error-response');
+    fork(undefined, 'persist');
   });
 
   node('persist', () => {
-    action(async (ctx) => ({);
-    fork(();
+    action(async (ctx) => ({}));
+    fork(undefined, 'respond');
   });
 
-  node('respond', terminal({
-    action: async (ctx) => ({
+  node('respond', terminal(
+    async (ctx) => ({
       response: { status: 201, body: { id: ctx.recordId, ok: true } },
-    }),
-  }));
+    })
+  ));
 
-  node('error-response', terminal({
-    action: async (ctx) => ({
+  node('error-response', terminal(
+    async (ctx) => ({
       response: { status: 400, body: { error: ctx.error ?? 'Bad request' } },
-    }),
-  }));
+    })
+  ));
 
   return { initial: 'validate' };
 });
@@ -67,11 +70,11 @@ type RequestLifecycle = { requestId: string };
 function createRequestDomain(requestId: string) {
   return defineDomain<RequestLifecycle>('request', () => {
     when('pending', () => {
-      on('START', { target: 'processing' });
+      on('start', { target: 'processing' });
     });
     when('processing', () => {
-      on('COMPLETE', { target: 'complete' });
-      on('FAIL', { target: 'failed' });
+      on('complete', { target: 'complete' });
+      on('fail', { target: 'failed' });
     });
     when('complete', terminal());
     when('failed', terminal());
@@ -99,16 +102,16 @@ const server = http.createServer(async (req, res) => {
   const body = JSON.parse(raw) as Record<string, unknown>;
 
   const requestDomain = createRequestDomain(crypto.randomUUID());
-  await requestDomain.follow('START');
+  await requestDomain.follow('start');
 
   const result = await handleRequest.run({ body, validated: false });
 
   const { status, body: resBody } = result.context.response!;
 
   if (status === 201) {
-    await requestDomain.follow('COMPLETE');
+    await requestDomain.follow('complete');
   } else {
-    await requestDomain.follow('FAIL');
+    await requestDomain.follow('fail');
   }
 
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -142,4 +145,4 @@ curl -X POST http://localhost:3000/api/records \
   -d '{"userId":"alice"}'
 ```
 
-The missing field routes the pipeline to the `error-response` terminal node, which writes a `400` response. The request domain follows `FAIL` and lands on the `failed` terminal state.
+The missing field routes the pipeline to the `error-response` terminal node, which writes a `400` response. The request domain follows `fail` and lands on the `failed` terminal state.

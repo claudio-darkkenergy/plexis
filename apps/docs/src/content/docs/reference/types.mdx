@@ -22,7 +22,7 @@ Return value of `domain.follow()` and `domain.followFrom()`.
 ### Example
 
 ```typescript
-const result = await order.follow('SUBMIT');
+const result = await order.follow('submit');
 
 if (result.status === 'followed') {
   console.log(`Moved from ${result.from} → ${result.to}`);
@@ -80,7 +80,7 @@ Captured by `domain.snapshot()`; restored via `domain.restore(snapshot)`.
 const snap = order.snapshot();
 // { state: 'pending', context: { orderId: 'o1' }, historyLength: 0 }
 
-await order.follow('SUBMIT');
+await order.follow('submit');
 order.restore(snap); // rolls back to 'pending'
 ```
 
@@ -103,12 +103,12 @@ Single transition record returned by `domain.history()`.
 ### Example
 
 ```typescript
-await order.follow('SUBMIT', { userId: 'u1' });
+await order.follow('submit', { userId: 'u1' });
 
 const [entry] = order.history();
 console.log(entry.from);    // 'pending'
 console.log(entry.to);      // 'processing'
-console.log(entry.event);   // 'SUBMIT'
+console.log(entry.event);   // 'submit'
 console.log(entry.payload); // { userId: 'u1' }
 ```
 
@@ -142,7 +142,7 @@ Return value of `domain.inspectNode()` and `pipeline.inspectNode()`.
 
 ```typescript
 const info = order.inspectNode('pending');
-console.log(info.outbound.map((e) => e.event)); // ['SUBMIT']
+console.log(info.outbound.map((e) => e.event)); // ['submit']
 console.log(info.reachableNodes.map((n) => n.id)); // ['processing']
 ```
 
@@ -192,10 +192,14 @@ type Ctx = { count: number };
 
 const counter = defineDomain<Ctx>('counter', () => {
   when('active', () => {
-    on('INCREMENT', { target: 'active',
-        action: (ctx) => ({ count: ctx.count + 1 });
-    on('NOOP', { target: 'active',
-        action: () => undefined, // returns void — no context change });
+    on('increment', {
+      target: 'active',
+      action: (ctx) => ({ count: ctx.count + 1 }),
+    });
+    on('noop', {
+      target: 'active',
+      action: () => undefined, // returns void — no context change
+    });
   });
   return { context: { count: 0 }, initial: 'active' };
 });
@@ -228,7 +232,7 @@ const domain = defineDomain(
   }
 );
 
-const result = await domain.follow('FAIL');
+const result = await domain.follow('fail');
 console.log(result.status); // 'error' — did not throw
 ```
 
@@ -269,13 +273,13 @@ import { createTracer, defineDomain, when, on, terminal } from '@tde.io/plexis';
 const tracer = createTracer({ captureContext: 'after' });
 const domain = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'done' });
+    on('submit', { target: 'done' });
   });
   when('done', terminal());
   return { context: {}, initial: 'pending' };
 }, { tracer });
 
-await domain.follow('SUBMIT');
+await domain.follow('submit');
 
 const events = tracer.history();
 events.forEach((e) => {

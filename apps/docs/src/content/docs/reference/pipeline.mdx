@@ -42,10 +42,10 @@ type Ctx = { validated: boolean; charged: boolean };
 const payment = definePipeline<Ctx>('payment', () => {
   node('validate', () => {
     action(async (ctx) => ({ validated: true }));
-    fork((ctx);
+    fork((ctx) => ctx.validated, 'charge');
     fork(undefined, 'decline');
   });
-  node('charge', terminal(async () => ({ charged: true) }));
+  node('charge', terminal(async () => ({ charged: true })));
   node('decline', terminal());
   return { initial: 'validate' };
 });

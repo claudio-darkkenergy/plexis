@@ -11,7 +11,7 @@ import type { OnActionInput } from '../src/types.js';
 
 describe('defineDomain and new Domain parity', () => {
   const setup = () => {
-    when('pending', () => { on('SUBMIT', { target: 'done' }); });
+    when('pending', () => { on('submit', { target: 'done' }); });
     when('done', terminal());
     return { context: { x: 0 }, initial: 'pending' };
   };
@@ -43,7 +43,7 @@ describe('construction validation', () => {
   it('throws UNKNOWN_TARGET_STATE for missing flow target in non-strict mode', () => {
     expect(() =>
       defineDomain('d', () => {
-        when('pending', () => { on('GO', { target: 'gone' }); });
+        when('pending', () => { on('go', { target: 'gone' }); });
         return { context: {}, initial: 'pending', strict: false };
       })
     ).toThrow(expect.objectContaining({ code: 'UNKNOWN_TARGET_STATE' }));
@@ -63,8 +63,8 @@ describe('when() outside setup throws BUILDER_CLOSED', () => {
 describe('follow() — state transitions', () => {
   function makeOrder() {
     return defineDomain('order', () => {
-      when('pending', () => { on('SUBMIT', { target: 'processing' }); });
-      when('processing', () => { on('COMPLETE', { target: 'done' }); });
+      when('pending', () => { on('submit', { target: 'processing' }); });
+      when('processing', () => { on('complete', { target: 'done' }); });
       when('done', terminal());
       return { context: {}, initial: 'pending' };
     });
@@ -72,7 +72,7 @@ describe('follow() — state transitions', () => {
 
   it('successful follow returns status: followed and updates state', async () => {
     const d = makeOrder();
-    const result = await d.follow('SUBMIT');
+    const result = await d.follow('submit');
     expect(result.status).toBe('followed');
     expect(result.to).toBe('processing');
     expect(d.state).toBe('processing');
@@ -80,11 +80,11 @@ describe('follow() — state transitions', () => {
 
   it('follow updates context via flow action', async () => {
     const d = defineDomain('d', () => {
-      when('a', () => { on('GO', { target: 'b', action: async () => ({ stepped: true }) }); });
+      when('a', () => { on('go', { target: 'b', action: async () => ({ stepped: true }) }); });
       when('b', () => {});
       return { context: {}, initial: 'a' };
     });
-    await d.follow('GO');
+    await d.follow('go');
     expect(d.context).toMatchObject({ stepped: true });
   });
 
@@ -92,7 +92,7 @@ describe('follow() — state transitions', () => {
     let capturedInput: OnActionInput | undefined;
     const d = defineDomain('d', () => {
       when('a', () => {
-        on('GO', {
+        on('go', {
           target: 'b',
           action: async (_ctx, input) => { capturedInput = input; return {}; },
         });
@@ -100,8 +100,8 @@ describe('follow() — state transitions', () => {
       when('b', () => {});
       return { context: {}, initial: 'a' };
     });
-    await d.follow('GO', 'myPayload');
-    expect(capturedInput).toMatchObject({ event: 'GO', payload: 'myPayload', traceId: expect.any(String) });
+    await d.follow('go', 'myPayload');
+    expect(capturedInput).toMatchObject({ event: 'go', payload: 'myPayload', traceId: expect.any(String) });
   });
 
   it('unknown event in non-strict mode returns status: ignored', async () => {
@@ -109,7 +109,7 @@ describe('follow() — state transitions', () => {
       when('a', () => {});
       return { context: {}, initial: 'a', strict: false };
     });
-    const result = await d.follow('UNKNOWN');
+    const result = await d.follow('unknown');
     expect(result.status).toBe('ignored');
     expect(d.state).toBe('a');
   });
@@ -119,7 +119,7 @@ describe('follow() — state transitions', () => {
       when('a', () => {});
       return { context: {}, initial: 'a', strict: true };
     });
-    await expect(d.follow('UNKNOWN')).rejects.toThrow(
+    await expect(d.follow('unknown')).rejects.toThrow(
       expect.objectContaining({ code: 'UNKNOWN_EVENT' })
     );
   });
@@ -129,7 +129,7 @@ describe('follow() — state transitions', () => {
       when('done', terminal());
       return { context: {}, initial: 'done', strict: false };
     });
-    const result = await d.follow('ANYTHING');
+    const result = await d.follow('anything');
     expect(result.status).toBe('ignored');
   });
 });
@@ -139,7 +139,7 @@ describe('guard evaluation', () => {
     let sideEffect = false;
     const d = defineDomain('d', () => {
       when('a', () => {
-        on('GO', {
+        on('go', {
           target: 'b',
           guard: async () => false,
           action: async () => { sideEffect = true; return {}; },
@@ -148,7 +148,7 @@ describe('guard evaluation', () => {
       when('b', () => {});
       return { context: {}, initial: 'a' };
     });
-    const result = await d.follow('GO');
+    const result = await d.follow('go');
     expect(result.status).toBe('blocked');
     expect(d.state).toBe('a');
     expect(sideEffect).toBe(false);
@@ -160,14 +160,14 @@ describe('execution order', () => {
     const d = defineDomain('d', () => {
       when('a', () => {
         exit(async () => ({ a: 1 }));
-        on('GO', { target: 'b', action: async () => ({ b: 2 }) });
+        on('go', { target: 'b', action: async () => ({ b: 2 }) });
       });
       when('b', () => {
         enter(async () => ({ a: 9 }));
       });
       return { context: {}, initial: 'a' };
     });
-    await d.follow('GO');
+    await d.follow('go');
     expect(d.context).toMatchObject({ a: 9, b: 2 });
   });
 });
@@ -193,25 +193,25 @@ describe('can()', () => {
       when('a', () => {});
       return { context: {}, initial: 'a' };
     });
-    expect(await d.can('UNKNOWN')).toBe(false);
+    expect(await d.can('unknown')).toBe(false);
   });
 
   it('returns true when flow exists and guard passes', async () => {
     const d = defineDomain('d', () => {
-      when('a', () => { on('GO', { target: 'b', guard: async () => true }); });
+      when('a', () => { on('go', { target: 'b', guard: async () => true }); });
       when('b', () => {});
       return { context: {}, initial: 'a' };
     });
-    expect(await d.can('GO')).toBe(true);
+    expect(await d.can('go')).toBe(true);
   });
 
   it('returns false when guard fails, no state change', async () => {
     const d = defineDomain('d', () => {
-      when('a', () => { on('GO', { target: 'b', guard: async () => false }); });
+      when('a', () => { on('go', { target: 'b', guard: async () => false }); });
       when('b', () => {});
       return { context: {}, initial: 'a' };
     });
-    const canResult = await d.can('GO');
+    const canResult = await d.can('go');
     expect(canResult).toBe(false);
     expect(d.state).toBe('a');
   });
@@ -222,22 +222,22 @@ describe('can()', () => {
 describe('followFrom()', () => {
   it('throws STATE_MISMATCH when current state differs from expected', async () => {
     const d = defineDomain('order', () => {
-      when('pending', () => { on('GO', { target: 'done' }); });
+      when('pending', () => { on('go', { target: 'done' }); });
       when('done', terminal());
       return { context: {}, initial: 'pending' };
     });
-    await expect(d.followFrom('processing', 'GO')).rejects.toThrow(
+    await expect(d.followFrom('processing', 'go')).rejects.toThrow(
       expect.objectContaining({ code: 'STATE_MISMATCH', domainId: 'order' })
     );
   });
 
   it('delegates to follow when state matches', async () => {
     const d = defineDomain('order', () => {
-      when('pending', () => { on('GO', { target: 'done' }); });
+      when('pending', () => { on('go', { target: 'done' }); });
       when('done', terminal());
       return { context: {}, initial: 'pending' };
     });
-    const result = await d.followFrom('pending', 'GO');
+    const result = await d.followFrom('pending', 'go');
     expect(result.status).toBe('followed');
   });
 });
@@ -247,12 +247,12 @@ describe('followFrom()', () => {
 describe('snapshot() / restore()', () => {
   it('restore returns domain to captured state', async () => {
     const d = defineDomain('d', () => {
-      when('a', () => { on('GO', { target: 'b' }); });
+      when('a', () => { on('go', { target: 'b' }); });
       when('b', () => {});
       return { context: { x: 0 }, initial: 'a' };
     });
     const snap = d.snapshot();
-    await d.follow('GO');
+    await d.follow('go');
     expect(d.state).toBe('b');
     d.restore(snap);
     expect(d.state).toBe('a');
@@ -265,27 +265,27 @@ describe('snapshot() / restore()', () => {
 describe('subscribe()', () => {
   it('listener receives snapshot after successful follow', async () => {
     const d = defineDomain('d', () => {
-      when('a', () => { on('GO', { target: 'b' }); });
+      when('a', () => { on('go', { target: 'b' }); });
       when('b', () => {});
       return { context: {}, initial: 'a' };
     });
     const snapshots: unknown[] = [];
     d.subscribe((snap) => snapshots.push(snap));
-    await d.follow('GO');
+    await d.follow('go');
     expect(snapshots).toHaveLength(1);
     expect((snapshots[0] as { state: string }).state).toBe('b');
   });
 
   it('throwing listener does not break subsequent listeners', async () => {
     const d = defineDomain('d', () => {
-      when('a', () => { on('GO', { target: 'b' }); });
+      when('a', () => { on('go', { target: 'b' }); });
       when('b', () => {});
       return { context: {}, initial: 'a' };
     });
     const received: unknown[] = [];
     d.subscribe(() => { throw new Error('bad listener'); });
     d.subscribe((snap) => received.push(snap));
-    await d.follow('GO');
+    await d.follow('go');
     expect(received).toHaveLength(1);
     expect(d.state).toBe('b');
   });
@@ -293,17 +293,17 @@ describe('subscribe()', () => {
   it('unsubscribe stops future notifications', async () => {
     const d = defineDomain('d', () => {
       when('a', () => {
-        on('GO', { target: 'b' });
-        on('BACK', { target: 'a' });
+        on('go', { target: 'b' });
+        on('back', { target: 'a' });
       });
-      when('b', () => { on('BACK', { target: 'a' }); });
+      when('b', () => { on('back', { target: 'a' }); });
       return { context: {}, initial: 'a', strict: false };
     });
     const received: unknown[] = [];
     const unsub = d.subscribe((snap) => received.push(snap));
-    await d.follow('GO');
+    await d.follow('go');
     unsub();
-    await d.follow('BACK');
+    await d.follow('back');
     expect(received).toHaveLength(1);
   });
 });
@@ -313,14 +313,14 @@ describe('subscribe()', () => {
 describe('history()', () => {
   it('records each successful transition', async () => {
     const d = defineDomain('d', () => {
-      when('a', () => { on('TO_B', { target: 'b' }); });
-      when('b', () => { on('TO_C', { target: 'c' }); });
-      when('c', () => { on('TO_A', { target: 'a' }); });
+      when('a', () => { on('toB', { target: 'b' }); });
+      when('b', () => { on('toC', { target: 'c' }); });
+      when('c', () => { on('toA', { target: 'a' }); });
       return { context: {}, initial: 'a' };
     });
-    await d.follow('TO_B');
-    await d.follow('TO_C');
-    await d.follow('TO_A');
+    await d.follow('toB');
+    await d.follow('toC');
+    await d.follow('toA');
     const hist = d.history();
     expect(hist).toHaveLength(3);
     expect(hist[0].from).toBe('a');
@@ -337,11 +337,11 @@ describe('flow pipeline integration', () => {
       return { initial: 'charge' };
     });
     const d = defineDomain('d', () => {
-      when('pending', () => { on('PAY', { target: 'done', pipeline: payPipeline }); });
+      when('pending', () => { on('pay', { target: 'done', pipeline: payPipeline }); });
       when('done', terminal());
       return { context: {}, initial: 'pending' };
     });
-    await d.follow('PAY');
+    await d.follow('pay');
     expect(d.context).toMatchObject({ charged: true });
     expect(d.state).toBe('done');
   });

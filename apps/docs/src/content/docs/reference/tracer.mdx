@@ -52,13 +52,13 @@ const tracer = createTracer({ captureContext: 'after', maxEvents: 500 });
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', terminal());
   return { context: {}, initial: 'pending' };
 }, { tracer });
 
-await order.follow('SUBMIT');
+await order.follow('submit');
 
 const events = tracer.history();
 console.log(events.length); // number of recorded events

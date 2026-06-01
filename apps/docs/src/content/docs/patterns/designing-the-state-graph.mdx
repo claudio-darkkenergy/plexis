@@ -14,11 +14,11 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const subscription = defineDomain('subscription', () => {
   when('trial', () => {
-    on('ACTIVATE', { target: 'active' });
-    on('EXPIRE', { target: 'expired' });
+    on('activate', { target: 'active' });
+    on('expire', { target: 'expired' });
   });
   when('active', () => {
-    on('CANCEL', { target: 'cancelled' });
+    on('cancel', { target: 'cancelled' });
   });
   when('expired', terminal());
   when('cancelled', terminal());
@@ -34,14 +34,14 @@ If `initial` names a state that was not registered, the runtime throws `PlexisEr
 
 ## Declaring terminal states
 
-A terminal state is one the domain can enter but never leave. Declare it with `terminal: true`. The domain will not follow any event while in a terminal state (following returns `status: 'ignored'`).
+A terminal state is one the domain can enter but never leave. Declare it by passing `terminal()` as the second argument to `when()`. The domain will not follow any event while in a terminal state (following returns `status: 'ignored'`).
 
 ```typescript
-when('fulfilled', terminal());  // no edges needed
-when('cancelled', terminal());  // same
+when('fulfilled', terminal());
+when('cancelled', terminal());
 ```
 
-Terminal states do not need an `edges` object. Including edges on a terminal state is allowed but they will never be followed.
+Terminal states do not need flows registered inside them. Any `on()` calls inside a terminal state's setup function are ignored at runtime.
 
 ## Unreachable states
 
@@ -50,7 +50,7 @@ An unreachable state is one that no edge points to and that is not the `initial`
 ```typescript
 const broken = defineDomain('broken', () => {
   when('active', () => {
-    on('DONE', { target: 'done' });
+    on('done', { target: 'done' });
   });
   when('done', terminal());
   // Nobody transitions to 'orphan' — it is unreachable
@@ -68,7 +68,7 @@ Set `strict: true` in the setup return value to turn graph integrity problems in
 ```typescript
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', terminal());
   // 'ghost' is unreachable

@@ -18,10 +18,10 @@ type OrderContext = { orderId: string | null };
 
 const order = defineDomain<OrderContext>('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', () => {
-    on('FULFILL', { target: 'fulfilled' });
+    on('fulfill', { target: 'fulfilled' });
   });
   when('fulfilled', terminal());
 
@@ -52,7 +52,7 @@ Register a flow on a state using `on(event, { target, guard?, action?, pipeline?
 
 ```typescript
 when('pending', () => {
-  on('SUBMIT', {
+  on('submit', {
     target: 'processing',
     guard: (ctx) => ctx.orderId !== null,
     action: async (ctx) => ({ submitted: true }),
@@ -77,7 +77,7 @@ when('processing', () => {
   exit(async (ctx) => {
     console.log('Leaving processing');
   });
-  on('FULFILL', { target: 'fulfilled' });
+  on('fulfill', { target: 'fulfilled' });
 });
 ```
 
@@ -97,7 +97,7 @@ when('processing', () => {
 Call `domain.follow(event, payload?)` to trigger a transition.
 
 ```typescript
-const result = await order.follow('SUBMIT');
+const result = await order.follow('submit');
 
 console.log(result.status);  // 'followed'
 console.log(result.from);    // 'pending'
@@ -112,7 +112,7 @@ See [DomainFollowResult](/reference/types#domainfollowresult) for the complete f
 Use `domain.can(event)` to test whether an event can be followed from the current state without triggering any side effects:
 
 ```typescript
-const canSubmit = await order.can('SUBMIT');
+const canSubmit = await order.can('submit');
 ```
 
 ## Subscriptions and History
@@ -152,11 +152,15 @@ if (saved) order.restore(JSON.parse(saved));
 In tests, snapshots let you jump the domain to any starting state without replaying events:
 
 ```typescript
-const processingState = { state: 'processing', context: { orderId: '123' }, historyLength: 1 };
+const processingState = {
+  state: 'processing',
+  context: { orderId: '123' },
+  historyLength: 1,
+};
 order.restore(processingState);
 
 // Now test transitions from 'processing' directly
-const result = await order.follow('FULFILL');
+const result = await order.follow('fulfill');
 ```
 
 ## Strict Mode
@@ -173,11 +177,11 @@ Using `as const` on the setup return value lets TypeScript infer the exact set o
 
 ```typescript
 const order = defineDomain('order', () => {
-  when('pending', () => { on('SUBMIT', { target: 'processing' }); });
+  when('pending', () => { on('submit', { target: 'processing' }); });
   when('processing', terminal());
   return { context: {}, initial: 'pending' } as const;
 });
 
-await order.follow('SUBMIT');  // ✓ OK
-await order.follow('CANCEL');  // ✗ TypeScript error
+await order.follow('submit');  // ✓ OK
+await order.follow('cancel');  // ✗ TypeScript error
 ```

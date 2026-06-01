@@ -80,7 +80,7 @@ describe('enter(), exit(), on()', () => {
   });
 
   it('on() throws BUILDER_CLOSED outside any scope', () => {
-    expect(() => on('SUBMIT', { target: 'x' })).toThrow(
+    expect(() => on('submit', { target: 'x' })).toThrow(
       expect.objectContaining({ code: 'BUILDER_CLOSED' })
     );
   });
@@ -107,7 +107,7 @@ describe('enter(), exit(), on()', () => {
     const scope = domainScope();
     expect(() =>
       withScope(scope, () => {
-        on('SUBMIT', { target: 'x' });
+        on('submit', { target: 'x' });
       })
     ).toThrow(expect.objectContaining({ code: 'BUILDER_CLOSED' }));
   });
@@ -120,13 +120,13 @@ describe('enter(), exit(), on()', () => {
       when('active', () => {
         enter(enterFn);
         exit(exitFn);
-        on('STOP', { target: 'done' });
+        on('stop', { target: 'done' });
       });
     });
     const def = scope.whens['active'] as any;
     expect(def.enter).toBe(enterFn);
     expect(def.exit).toBe(exitFn);
-    expect(def.on['STOP']).toMatchObject({ target: 'done' });
+    expect(def.on['stop']).toMatchObject({ target: 'done' });
   });
 });
 

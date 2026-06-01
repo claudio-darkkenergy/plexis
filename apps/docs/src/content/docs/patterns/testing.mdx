@@ -13,17 +13,17 @@ import { expect, test } from 'vitest';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', () => {
-    on('FULFILL', { target: 'fulfilled' });
+    on('fulfill', { target: 'fulfilled' });
   });
   when('fulfilled', terminal());
   return { context: { orderId: 'ord_1' }, initial: 'pending' };
 });
 
-test('SUBMIT transitions pending → processing', async () => {
-  const result = await order.follow('SUBMIT');
+test('submit transitions pending → processing', async () => {
+  const result = await order.follow('submit');
 
   expect(result.status).toBe('followed');
   expect(result.from).toBe('pending');
@@ -37,9 +37,9 @@ test('SUBMIT transitions pending → processing', async () => {
 Real domain paths often require several transitions to reach the state you want to test. `followFrom()` teleports the domain to any registered state before following the event — without running `exit`, `enter`, or any pipeline for the intermediate states.
 
 ```typescript
-test('FULFILL transitions processing → fulfilled', async () => {
-  // Start at 'processing' without going through SUBMIT
-  const result = await order.followFrom('processing', 'FULFILL');
+test('fulfill transitions processing → fulfilled', async () => {
+  // Start at 'processing' without going through submit
+  const result = await order.followFrom('processing', 'fulfill');
 
   expect(result.status).toBe('followed');
   expect(result.to).toBe('fulfilled');
@@ -55,15 +55,15 @@ test('FULFILL transitions processing → fulfilled', async () => {
 
 ```typescript
 test('history records both transitions', async () => {
-  await order.follow('SUBMIT');
-  await order.follow('FULFILL');
+  await order.follow('submit');
+  await order.follow('fulfill');
 
   const history = order.history();
 
   expect(history).toHaveLength(2);
-  expect(history[0].event).toBe('SUBMIT');
+  expect(history[0].event).toBe('submit');
   expect(history[0].from).toBe('pending');
-  expect(history[1].event).toBe('FULFILL');
+  expect(history[1].event).toBe('fulfill');
   expect(history[1].to).toBe('fulfilled');
 });
 ```
@@ -75,15 +75,17 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const account = defineDomain('account', () => {
   when('open', () => {
-    on('WITHDRAW', { target: 'open',
-        guard: async (ctx) => ctx.balance >= ctx.amount,
-        action: async (ctx) => ({ balance: ctx.balance - ctx.amount });
+    on('withdraw', {
+      target: 'open',
+      guard: async (ctx) => ctx.balance >= ctx.amount,
+      action: async (ctx) => ({ balance: ctx.balance - ctx.amount }),
+    });
   });
   return { context: { balance: 50, amount: 100 }, initial: 'open' };
 });
 
-test('WITHDRAW is blocked when balance is insufficient', async () => {
-  const result = await account.follow('WITHDRAW');
+test('withdraw is blocked when balance is insufficient', async () => {
+  const result = await account.follow('withdraw');
 
   expect(result.status).toBe('blocked');
   expect(account.context.balance).toBe(50); // unchanged
@@ -102,10 +104,10 @@ type Ctx = { cardValid: boolean; charged: boolean };
 
 const charge = definePipeline<Ctx>('charge', () => {
   node('check-card', () => {
-    fork((ctx);
-    fork((ctx);
+    fork((ctx) => ctx.cardValid, 'charge');
+    fork((ctx) => !ctx.cardValid, 'decline');
   });
-  node('charge',  terminal());
+  node('charge', terminal());
   node('decline', terminal());
   return { initial: 'check-card' };
 });
@@ -133,7 +135,7 @@ A single domain instance accumulates state and history across calls. For isolate
 function makeOrder() {
   return defineDomain('order', () => {
     when('pending', () => {
-      on('SUBMIT', { target: 'processing' });
+      on('submit', { target: 'processing' });
     });
     when('processing', terminal());
     return { context: {}, initial: 'pending' };
@@ -145,9 +147,9 @@ test('starts in pending', () => {
   expect(order.state).toBe('pending');
 });
 
-test('SUBMIT transitions to processing', async () => {
+test('submit transitions to processing', async () => {
   const order = makeOrder();
-  await order.follow('SUBMIT');
+  await order.follow('submit');
   expect(order.state).toBe('processing');
 });
 ```

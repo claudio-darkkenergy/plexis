@@ -35,11 +35,11 @@ import { defineDomain, when, enter, exit, on, terminal } from '@tde.io/plexis';
 const door = defineDomain('door', () => {
   when('closed', () => {
     exit(async (ctx) => ({ lastClosed: Date.now() }));
-    on('OPEN', { target: 'open' });
+    on('open', { target: 'open' });
   });
   when('open', () => {
     enter(async (ctx) => ({ lastOpened: Date.now() }));
-    on('CLOSE', { target: 'closed' });
+    on('close', { target: 'closed' });
   });
   return { context: { lastOpened: 0, lastClosed: 0 }, initial: 'closed' };
 });
@@ -106,12 +106,12 @@ type Ctx = { approved: boolean; approvedBy?: string };
 
 const approval = defineDomain<Ctx>('approval', () => {
   when('pending', () => {
-    on('APPROVE', {
+    on('approve', {
       target: 'approved',
       guard: (ctx, { payload }) => payload != null,
       action: (ctx, { payload }) => ({ approvedBy: payload as string }),
     });
-    on('REJECT', { target: 'rejected' });
+    on('reject', { target: 'rejected' });
   });
   when('approved', terminal());
   when('rejected', terminal());
@@ -182,7 +182,9 @@ Registers a forward transition on the current node in declaration order. Must be
 
 ```typescript
 function fork<TContext>(
-  condition: ((ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>) | undefined,
+  condition:
+    | ((ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>)
+    | undefined,
   target: string | Pipeline<TContext>,
   options?: { label?: string; metadata?: Record<string, unknown> }
 ): void
@@ -216,8 +218,8 @@ const pipeline = definePipeline<Ctx>('check', () => {
     fork(undefined, 'failing');  // unconditional fallback
   });
   node('excellent', terminal());
-  node('passing',   terminal());
-  node('failing',   terminal());
+  node('passing', terminal());
+  node('failing', terminal());
   return { initial: 'evaluate' };
 });
 ```

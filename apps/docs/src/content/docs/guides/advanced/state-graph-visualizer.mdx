@@ -14,11 +14,11 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', () => {
-    on('FULFILL', { target: 'fulfilled' });
-    on('CANCEL', { target: 'cancelled' });
+    on('fulfill', { target: 'fulfilled' });
+    on('cancel', { target: 'cancelled' });
   });
   when('fulfilled', terminal());
   when('cancelled', terminal());
@@ -26,7 +26,11 @@ const order = defineDomain('order', () => {
 });
 
 const descriptor = order.graph.describe();
-// { id: 'order', kind: 'domain', nodes: [...], edges: [...], entryNodes: [...], terminalNodes: [...], attachments: [] }
+// {
+//   id: 'order', kind: 'domain',
+//   nodes: [...], edges: [...],
+//   entryNodes: [...], terminalNodes: [...], attachments: []
+// }
 ```
 
 ## Generating a Mermaid state diagram
@@ -49,7 +53,7 @@ function toMermaid(descriptor: GraphDescriptor): string {
   // Map edges — use event label when available, fall back to edge kind
   for (const edge of descriptor.edges) {
     const from = edge.from.nodeId ?? edge.from.edgeId ?? '?';
-    const to   = edge.to.nodeId   ?? edge.to.edgeId   ?? '?';
+    const to = edge.to.nodeId ?? edge.to.edgeId ?? '?';
     const label = edge.event ?? edge.label ?? edge.kind;
     lines.push(`  ${from} --> ${to} : ${label}`);
   }
@@ -67,9 +71,9 @@ function toMermaid(descriptor: GraphDescriptor): string {
 const mermaid = toMermaid(descriptor);
 // stateDiagram-v2
 //   [*] --> pending
-//   pending --> processing : SUBMIT
-//   processing --> fulfilled : FULFILL
-//   processing --> cancelled : CANCEL
+//   pending --> processing : submit
+//   processing --> fulfilled : fulfill
+//   processing --> cancelled : cancel
 //   fulfilled --> [*]
 //   cancelled --> [*]
 ```
@@ -85,7 +89,7 @@ import type { GraphDescriptor } from '@tde.io/plexis';
 
 function toDot(descriptor: GraphDescriptor): string {
   const terminalIds = new Set(descriptor.terminalNodes.map((n) => n.nodeId).filter(Boolean));
-  const entryIds    = new Set(descriptor.entryNodes.map((n) => n.nodeId).filter(Boolean));
+  const entryIds = new Set(descriptor.entryNodes.map((n) => n.nodeId).filter(Boolean));
 
   const lines: string[] = [`digraph ${descriptor.id} {`];
   lines.push('  rankdir=LR;');
@@ -103,8 +107,8 @@ function toDot(descriptor: GraphDescriptor): string {
 
   // Edge declarations
   for (const edge of descriptor.edges) {
-    const from  = edge.from.nodeId ?? edge.from.edgeId ?? '?';
-    const to    = edge.to.nodeId   ?? edge.to.edgeId   ?? '?';
+    const from = edge.from.nodeId ?? edge.from.edgeId ?? '?';
+    const to = edge.to.nodeId ?? edge.to.edgeId ?? '?';
     const label = edge.event ?? edge.label ?? edge.kind;
     lines.push(`  "${from}" -> "${to}" [label="${label}"];`);
   }
@@ -121,9 +125,9 @@ const dot = toDot(descriptor);
 //   "processing" [shape=circle];
 //   "fulfilled" [shape=doublecircle];
 //   "cancelled" [shape=doublecircle];
-//   "pending" -> "processing" [label="SUBMIT"];
-//   "processing" -> "fulfilled" [label="FULFILL"];
-//   "processing" -> "cancelled" [label="CANCEL"];
+//   "pending" -> "processing" [label="submit"];
+//   "processing" -> "fulfilled" [label="fulfill"];
+//   "processing" -> "cancelled" [label="cancel"];
 // }
 ```
 
@@ -136,10 +140,10 @@ import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 const charge = definePipeline('charge', () => {
   node('validate', () => {
-    fork((ctx);
-    fork((ctx);
+    fork((ctx) => ctx.cardValid, 'charge');
+    fork((ctx) => !ctx.cardValid, 'decline');
   });
-  node('charge',  terminal());
+  node('charge', terminal());
   node('decline', terminal());
   return { initial: 'validate' };
 });
@@ -160,9 +164,11 @@ function toMermaidSimple(descriptor: GraphDescriptor): string {
   }
 
   // Only render the primary transition edges
-  for (const edge of descriptor.edges.filter((e) => e.kind === 'domain-flow' || e.kind === 'pipeline-fork')) {
-    const from  = edge.from.nodeId ?? '?';
-    const to    = edge.to.nodeId   ?? '?';
+  for (const edge of descriptor.edges.filter(
+    (e) => e.kind === 'domain-flow' || e.kind === 'pipeline-fork'
+  )) {
+    const from = edge.from.nodeId ?? '?';
+    const to = edge.to.nodeId ?? '?';
     const label = edge.event ?? edge.label ?? '';
     lines.push(`  ${from} --> ${to} : ${label}`);
   }

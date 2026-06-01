@@ -15,11 +15,11 @@ type Ctx = { score: number };
 const classify = definePipeline<Ctx>('classify', () => {
   node('evaluate', () => {
     action(async (ctx) => ctx);
-    fork((ctx);
-    fork((ctx);
-    fork((ctx);
-    fork((ctx);
-    fork((ctx);
+    fork((ctx) => ctx.score >= 90, 'grade-a');
+    fork((ctx) => ctx.score >= 80, 'grade-b');
+    fork((ctx) => ctx.score >= 70, 'grade-c');
+    fork((ctx) => ctx.score >= 60, 'grade-d');
+    fork(undefined, 'grade-f');
   });
   node('grade-a', terminal());
   node('grade-b', terminal());
@@ -31,7 +31,7 @@ const classify = definePipeline<Ctx>('classify', () => {
 
 const result = await classify.run({ score: 85 });
 // score >= 90 → false (skip)
-// score >= 80 → true  (wins)
+// score >= 80 → true (wins)
 // result.finalNode === 'grade-b'
 ```
 
@@ -48,13 +48,13 @@ type Ctx = { status: string };
 
 const route = definePipeline<Ctx>('route', () => {
   node('dispatch', () => {
-    fork((ctx);
-    fork((ctx);
-    fork(undefined,                           'reject');
+    fork((ctx) => ctx.status === 'approved', 'process');
+    fork((ctx) => ctx.status === 'review', 'hold');
+    fork(undefined, 'reject');
   });
   node('process', terminal());
-  node('hold',    terminal());
-  node('reject',  terminal());
+  node('hold', terminal());
+  node('reject', terminal());
   return { initial: 'dispatch' };
 });
 ```
@@ -70,18 +70,18 @@ type Ctx = { sendNotification: boolean };
 
 const maybe = definePipeline<Ctx>('maybe', () => {
   node('check', () => {
-    fork((ctx);
+    fork((ctx) => ctx.sendNotification, 'notify');
   });
   node('notify', terminal());
   return { initial: 'check' };
 });
 
 const result = await maybe.run({ sendNotification: false });
-// result.status    === 'stopped'
+// result.status === 'stopped'
 // result.finalNode === 'check'
 ```
 
-Distinguish this from a terminal node: `status: 'completed'` means a node with `terminal: true` was reached; `status: 'stopped'` means execution ended because no fork matched.
+Distinguish this from a terminal node: `status: 'completed'` means a terminal node (registered with `terminal()`) was reached; `status: 'stopped'` means execution ended because no fork matched.
 
 ## Fork conditions run after the action
 
@@ -95,8 +95,8 @@ type Ctx = { raw: number; score: number };
 const score = definePipeline<Ctx>('score', () => {
   node('compute', () => {
     action(async (ctx) => ({ score: ctx.raw * 10 }));
-    fork((ctx);
-    fork(undefined,                  'fail', { label: 'fail' });
+    fork((ctx) => ctx.score >= 100, 'pass', { label: 'pass' });
+    fork(undefined, 'fail', { label: 'fail' });
   });
   node('pass', terminal());
   node('fail', terminal());

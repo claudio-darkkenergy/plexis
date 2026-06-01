@@ -15,7 +15,7 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 // setup() runs here, synchronously
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', terminal());
 
@@ -54,7 +54,7 @@ node('validate', terminal());
 // Called in defineDomain body but outside a when() setup
 import { defineDomain, on } from '@tde.io/plexis';
 defineDomain('d', () => {
-  on('SUBMIT', { target: 'x' }); // throws — must be inside when()
+  on('submit', { target: 'x' }); // throws — must be inside when()
   return { context: {}, initial: 'x' };
 });
 ```
@@ -74,7 +74,7 @@ const notifyUser = definePipeline('notify-user', () => {
 
 const signup = defineDomain('signup', () => {
   when('new', () => {
-    on('ACTIVATE', { target: 'active', pipeline: notifyUser });
+    on('activate', { target: 'active', pipeline: notifyUser });
   });
   when('active', terminal());
   return { context: {}, initial: 'new' };

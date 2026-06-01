@@ -12,7 +12,7 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('SUBMIT', { target: 'processing' });
+    on('submit', { target: 'processing' });
   });
   when('processing', terminal());
   return { context: { orderId: 'ord_1' }, initial: 'pending' };
@@ -25,7 +25,7 @@ const unsubscribe = order.subscribe((snapshot) => {
   console.log(`History length: ${snapshot.historyLength}`);
 });
 
-await order.follow('SUBMIT');
+await order.follow('submit');
 // → State: processing
 // → Context: { orderId: 'ord_1' }
 // → History length: 1
@@ -65,10 +65,10 @@ const unsubscribe = order.subscribe((snap) => {
 ## Multiple subscribers
 
 ```typescript
-const log   = order.subscribe((snap) => console.log('log:', snap.state));
+const log = order.subscribe((snap) => console.log('log:', snap.state));
 const store = order.subscribe((snap) => externalStore.set(snap));
 
-await order.follow('SUBMIT');
+await order.follow('submit');
 // Both listeners are called
 
 log();   // stop logging
@@ -87,7 +87,7 @@ order.subscribe((snap) => {
   }
 });
 
-await order.follow('SUBMIT'); // listener fires with state: 'processing'
+await order.follow('submit'); // listener fires with state: 'processing'
 // No more follows are possible from a terminal state
 ```
 
