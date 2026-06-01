@@ -67,9 +67,11 @@ The `{ target: 'x', guard, action, pipeline }` object form has been **removed**.
 ### `action()` scope rules
 
 `action(fn)` is valid in exactly three contexts:
-- Inside a `node` setup → node action, receives `PipelineActionInput` (`nodeId`, `pipelineId`, `input`, `traceId`)
-- Inside an `on` setup → transition action, receives `OnActionInput` (`event`, `payload`, `traceId`)
-- As the optional arg to `terminal(fn?)` → node-context final action, receives `PipelineActionInput`
+- Inside a `node` setup → node action, receives `ActionInput` (`source`=nodeId, `scope`=pipelineId, `payload`=pipeline run input, `traceId`)
+- Inside an `on` setup → transition action, receives `ActionInput` (`source`=event name, `scope`=originating whenId / from-state, `payload`=event payload, `traceId`)
+- As the optional arg to `terminal(fn?)` → node-context final action, receives `ActionInput`
+
+`ActionInput` is a single unified shape — no union, no narrowing required. All four fields are always present; `payload` may be `undefined` when no input is supplied.
 
 Called inside a `when` setup but outside any `on` or as the first arg to `terminal`, it throws `BUILDER_CLOSED`.
 
@@ -134,6 +136,7 @@ Custom merge can be provided in `DefineDomainOptions` / `DefinePipelineOptions`.
 | `OnDef` | Assembled flow (internal): target + optional guard/action/pipeline |
 | `TargetDef` | Scope-independent sentinel returned by `target(id)` |
 | `OnSetupFn` | Type of the setup function form: `() => TargetDef` |
+| `ActionInput` | Unified handler input for all `action(fn)` scopes: `source`, `scope`, `payload`, `traceId` |
 | `OnGuardInput` | Input to a guard registered via `guard(fn)` in an `on` setup |
 | `PipelineNodeDef` | Node with action, forks |
 | `PipelineForkDef` | Fork with condition, target, label |

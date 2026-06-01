@@ -5,7 +5,7 @@ import { PlexisError } from '../src/core/errors.js';
 import { when, enter, exit, on, target, guard, pipeline, terminal } from '../src/core/helpers.js';
 import { definePipeline } from '../src/core/pipeline.js';
 import { node, action, fork } from '../src/core/helpers.js';
-import type { OnActionInput } from '../src/types.js';
+import type { ActionInput } from '../src/types.js';
 
 // ─── Construction ──────────────────────────────────────────────────────────
 
@@ -93,12 +93,12 @@ describe('follow() — state transitions', () => {
     expect(d.context).toMatchObject({ stepped: true });
   });
 
-  it('flow action receives OnActionInput shape', async () => {
-    let capturedInput: OnActionInput | undefined;
+  it('flow action receives ActionInput shape', async () => {
+    let capturedInput: ActionInput | undefined;
     const d = defineDomain('d', () => {
       when('a', () => {
         on('go', () => {
-          action(async (_ctx, input) => { capturedInput = input as OnActionInput; return {}; });
+          action(async (_ctx, input) => { capturedInput = input; return {}; });
           return target('b');
         });
       });
@@ -106,7 +106,7 @@ describe('follow() — state transitions', () => {
       return { context: {}, initial: 'a' };
     });
     await d.follow('go', 'myPayload');
-    expect(capturedInput).toMatchObject({ event: 'go', payload: 'myPayload', traceId: expect.any(String) });
+    expect(capturedInput).toMatchObject({ source: 'go', scope: 'a', payload: 'myPayload', traceId: expect.any(String) });
   });
 
   it('unknown event in non-strict mode returns status: ignored', async () => {
@@ -370,9 +370,31 @@ describe('flow pipeline integration', () => {
   });
 });
 
+describe('ActionInput — on-action input shape', () => {
+  it('scope is the originating from-state, not the transition target', async () => {
+    let capturedInput: ActionInput | undefined;
+    const d = defineDomain('d', () => {
+      when('pending', () => {
+        on('submit', () => {
+          action(async (_ctx, input) => { capturedInput = input; return {}; });
+          return target('processing');
+        });
+      });
+      when('processing', () => {});
+      return { context: {}, initial: 'pending' };
+    });
+    await d.follow('submit', 'myPayload');
+    // scope must be 'pending' (from-state), not 'processing' (target)
+    expect(capturedInput?.scope).toBe('pending');
+    expect(capturedInput?.source).toBe('submit');
+    expect(capturedInput?.payload).toBe('myPayload');
+    expect(capturedInput?.traceId).toBeTruthy();
+  });
+});
+
 describe('on() setup-function form — guard and pipeline drive follow correctly', () => {
-  it('on action receives OnActionInput; guard and pipeline work via setup fn', async () => {
-    let capturedInput: OnActionInput | undefined;
+  it('on action receives ActionInput; guard and pipeline work via setup fn', async () => {
+    let capturedInput: ActionInput | undefined;
     const p = definePipeline('pay', () => {
       node('charge', terminal(async () => ({ charged: true })));
       return { initial: 'charge' };
@@ -381,7 +403,7 @@ describe('on() setup-function form — guard and pipeline drive follow correctly
       when('pending', () => {
         on('submit', () => {
           guard(async () => true);
-          action(async (_ctx, input) => { capturedInput = input as OnActionInput; return {}; });
+          action(async (_ctx, input) => { capturedInput = input; return {}; });
           pipeline(p);
           return target('done');
         });
@@ -392,6 +414,6 @@ describe('on() setup-function form — guard and pipeline drive follow correctly
     await d.follow('submit', { orderId: 'abc' });
     expect(d.state).toBe('done');
     expect(d.context).toMatchObject({ charged: true });
-    expect(capturedInput).toMatchObject({ event: 'submit', payload: { orderId: 'abc' }, traceId: expect.any(String) });
+    expect(capturedInput).toMatchObject({ source: 'submit', scope: 'pending', payload: { orderId: 'abc' }, traceId: expect.any(String) });
   });
 });

@@ -187,7 +187,8 @@ export class Domain<TContext extends object = Record<string, unknown>, TEdges ex
     // 2. Flow action
     if (onDef.action) {
       tracer?.record({ traceId, level: 'action', type: 'action.started', status: 'started', domainId: this.id, event: event as string });
-      const patch = await onDef.action(ctx, input);
+      const actionInput = { source: event as string, scope: fromState, payload, traceId };
+      const patch = await onDef.action(ctx, actionInput);
       ctx = applyMerge(ctx, patch, merge, { phase: 'flow-action', domainId: this.id, event: event as string });
       tracer?.record({ traceId, level: 'action', type: 'action.completed', status: 'completed', domainId: this.id, event: event as string, outputPatch: patch });
     }

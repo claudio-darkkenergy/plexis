@@ -7,9 +7,8 @@ import type {
   Pipeline as PipelineType,
   StateHookInput,
   PatchLike,
-  PipelineActionInput,
+  ActionInput,
   PipelineConditionInput,
-  OnActionInput,
   GuardInput,
   TargetDef,
 } from '../types.js';
@@ -21,7 +20,7 @@ const TERMINAL = Symbol('plexis.terminal');
 type TerminalSentinel = {
   readonly [TERMINAL]: true;
   // ctx typed as `any` — stored for any TContext, consumed by the node that owns it
-  readonly action?: (ctx: any, input: PipelineActionInput) => PatchLike<any> | Promise<PatchLike<any>>;
+  readonly action?: (ctx: any, input: ActionInput) => PatchLike<any> | Promise<PatchLike<any>>;
 };
 
 function isTerminal(x: unknown): x is TerminalSentinel {
@@ -30,7 +29,7 @@ function isTerminal(x: unknown): x is TerminalSentinel {
 }
 
 export function terminal<TContext extends object>(
-  fn?: (ctx: TContext, input: PipelineActionInput) => PatchLike<TContext> | Promise<PatchLike<TContext>>
+  fn?: (ctx: TContext, input: ActionInput) => PatchLike<TContext> | Promise<PatchLike<TContext>>
 ): TerminalSentinel {
   return fn ? { [TERMINAL]: true, action: fn } : { [TERMINAL]: true };
 }
@@ -63,7 +62,7 @@ type OnScope = {
   kind: 'on';
   event: string;
   guard: ((ctx: any, input: GuardInput) => boolean | Promise<boolean>) | null;
-  action: ((ctx: any, input: OnActionInput) => PatchLike<any> | Promise<PatchLike<any>>) | null;
+  action: ((ctx: any, input: ActionInput) => PatchLike<any> | Promise<PatchLike<any>>) | null;
   pipeline: PipelineType<any> | null;
 };
 
@@ -235,7 +234,7 @@ export function node<TContext extends object>(
 export function action<TContext extends object>(
   fn: (
     ctx: TContext,
-    input: PipelineActionInput | OnActionInput
+    input: ActionInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>
 ): void {
   const scope = getCurrentScope();

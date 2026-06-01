@@ -205,12 +205,12 @@ describe('sub-pipeline embedding', () => {
   });
 });
 
-describe('PipelineActionInput — node action and terminal action input shape', () => {
-  it('node action receives PipelineActionInput with nodeId, pipelineId, input, traceId', async () => {
+describe('ActionInput — node action and terminal action input shape', () => {
+  it('node action receives ActionInput with source=nodeId, scope=pipelineId, payload=runInput, traceId', async () => {
     let capturedInput: unknown;
     const p = definePipeline('my-pipeline', () => {
       node('validate-card', () => {
-        action(async (_ctx, input) => { capturedInput = input; return { seen: (input as any).nodeId }; });
+        action(async (_ctx, input) => { capturedInput = input; return { seen: input.source }; });
         fork(undefined, 'done');
       });
       node('done', terminal());
@@ -219,20 +219,20 @@ describe('PipelineActionInput — node action and terminal action input shape', 
     const runInput = { amount: 100 };
     await p.run({}, runInput);
     expect(capturedInput).toMatchObject({
-      nodeId: 'validate-card',
-      pipelineId: 'my-pipeline',
-      input: runInput,
+      source: 'validate-card',
+      scope: 'my-pipeline',
+      payload: runInput,
       traceId: expect.any(String),
     });
   });
 
-  it('terminal(fn) final action receives PipelineActionInput and merges patch before completed', async () => {
+  it('terminal(fn) final action receives ActionInput and merges patch before completed', async () => {
     let capturedInput: unknown;
     const p = definePipeline('my-pipeline', () => {
       node('start', () => { fork(undefined, 'charge'); });
       node('charge', terminal(async (_ctx, input) => {
         capturedInput = input;
-        return { at: (input as any).nodeId };
+        return { at: input.source };
       }));
       return { initial: 'start' };
     });
@@ -240,10 +240,25 @@ describe('PipelineActionInput — node action and terminal action input shape', 
     expect(result.status).toBe('completed');
     expect(result.context).toMatchObject({ at: 'charge' });
     expect(capturedInput).toMatchObject({
-      nodeId: 'charge',
-      pipelineId: 'my-pipeline',
+      source: 'charge',
+      scope: 'my-pipeline',
       traceId: expect.any(String),
     });
+  });
+
+  it('payload key is always present (value is undefined) when pipeline is run with no input', async () => {
+    let capturedInput: unknown;
+    const p = definePipeline('p-no-input', () => {
+      node('only', () => {
+        action(async (_ctx, input) => { capturedInput = input; return {}; });
+        fork(undefined, 'done');
+      });
+      node('done', terminal());
+      return { initial: 'only' };
+    });
+    await p.run({});
+    expect('payload' in (capturedInput as object)).toBe(true);
+    expect((capturedInput as any).payload).toBeUndefined();
   });
 });
 

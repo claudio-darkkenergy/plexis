@@ -194,21 +194,33 @@ export declare class Tracer implements Tracer {
 
 export declare function createTracer(options?: TracerOptions): Tracer;
 
+// ─── Handler Inputs ──────────────────────────────────────────────────────────
+
+/**
+ * Unified input received by every `action(fn)` handler, regardless of scope.
+ *
+ * Field semantics by scope:
+ * - **`source`**: `nodeId` in a `node` scope; event name in an `on` scope.
+ * - **`scope`**: `pipelineId` in a `node` scope; `whenId` (originating state id) in an `on` scope.
+ * - **`payload`**: pipeline run input in a `node` scope; event payload in an `on` scope. Always present; may be `undefined`.
+ * - **`traceId`**: correlation id for the current trace.
+ */
+export type ActionInput = {
+  source: string;
+  scope: string;
+  payload: unknown;
+  traceId: string;
+};
+
 // ─── Pipeline Runtime Types ─────────────────────────────────────────────────
 
-export type PipelineActionInput = {
-  input?: unknown;
+export type PipelineConditionInput = {
+  payload?: unknown;
   nodeId: string;
   pipelineId: string;
   traceId: string;
 };
 
-export type PipelineConditionInput = {
-  input?: unknown;
-  nodeId: string;
-  pipelineId: string;
-  traceId: string;
-};
 
 export interface Pipeline<TContext extends object = Record<string, unknown>> {
   id: string;
@@ -239,7 +251,7 @@ export type PipelineNodeDef<
 > = {
   action?: (
     ctx: TContext,
-    input: PipelineActionInput
+    input: ActionInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>;
   forks?: PipelineForkDef<TContext>[];
   terminal?: boolean;
@@ -299,18 +311,12 @@ export type GuardInput = {
   traceId: string;
 };
 
-export type OnActionInput = {
-  event: string;
-  payload?: unknown;
-  traceId: string;
-};
-
 export type OnDef<TContext extends object = Record<string, unknown>> = {
   target: string;
   guard?: (ctx: TContext, input: GuardInput) => boolean | Promise<boolean>;
   action?: (
     ctx: TContext,
-    input: OnActionInput
+    input: ActionInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>;
   pipeline?: Pipeline<TContext>;
   metadata?: Record<string, unknown>;
@@ -553,7 +559,7 @@ export declare function node<TContext extends object>(
 export declare function action<TContext extends object>(
   fn: (
     ctx: TContext,
-    input: PipelineActionInput | OnActionInput
+    input: ActionInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>
 ): void;
 
@@ -568,7 +574,7 @@ export declare function fork<TContext extends object>(
 export declare function terminal<TContext extends object>(
   fn?: (
     ctx: TContext,
-    input: PipelineActionInput
+    input: ActionInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>
 ): TerminalSentinel;
 
