@@ -2,14 +2,17 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Pipeline, definePipeline } from '../src/core/pipeline.js';
 import { PlexisError } from '../src/core/errors.js';
-import { node, fork, terminal } from '../src/core/helpers.js';
+import { node, action, fork, terminal } from '../src/core/helpers.js';
 import { createTracer } from '../src/core/tracer.js';
 
 // ─── Construction ──────────────────────────────────────────────────────────
 
 describe('definePipeline and new Pipeline parity', () => {
   const setup = () => {
-    node('validate', { action: async () => ({ checked: true }), forks: [fork(undefined, 'done')] });
+    node('validate', () => {
+      action(async () => ({ checked: true }));
+      fork(undefined, 'done');
+    });
     node('done', terminal());
     return { initial: 'validate' };
   };
@@ -55,7 +58,7 @@ describe('construction validation', () => {
   it('throws UNKNOWN_TARGET_NODE when fork target is missing', () => {
     expect(() =>
       definePipeline('p', () => {
-        node('a', { forks: [fork(undefined, 'gone')] });
+        node('a', () => { fork(undefined, 'gone'); });
         node('b', terminal());
         return { initial: 'a' };
       })
@@ -76,7 +79,10 @@ describe('node() outside setup throws BUILDER_CLOSED', () => {
 describe('pipeline.run() — execution flow', () => {
   it('starts at initial node and merges action patch', async () => {
     const p = definePipeline('p', () => {
-      node('start', { action: async () => ({ started: true }), forks: [fork(undefined, 'end')] });
+      node('start', () => {
+        action(async () => ({ started: true }));
+        fork(undefined, 'end');
+      });
       node('end', terminal());
       return { initial: 'start' };
     });
@@ -86,16 +92,23 @@ describe('pipeline.run() — execution flow', () => {
 
   it('first-match-wins fork evaluation', async () => {
     const p = definePipeline('p', () => {
-      node('split', {
-        forks: [
-          fork(async (ctx: Record<string, unknown>) => ctx.val === 'a', 'a'),
-          fork(async (ctx: Record<string, unknown>) => ctx.val === 'b', 'b'),
-          fork(undefined, 'fallback'),
-        ],
+      node('split', () => {
+        fork(async (ctx: Record<string, unknown>) => ctx.val === 'a', 'a');
+        fork(async (ctx: Record<string, unknown>) => ctx.val === 'b', 'b');
+        fork(undefined, 'fallback');
       });
-      node('a', { action: async () => ({ chosen: 'a' }), forks: [fork(undefined, 'end')] });
-      node('b', { action: async () => ({ chosen: 'b' }), forks: [fork(undefined, 'end')] });
-      node('fallback', { action: async () => ({ chosen: 'fallback' }), forks: [fork(undefined, 'end')] });
+      node('a', () => {
+        action(async () => ({ chosen: 'a' }));
+        fork(undefined, 'end');
+      });
+      node('b', () => {
+        action(async () => ({ chosen: 'b' }));
+        fork(undefined, 'end');
+      });
+      node('fallback', () => {
+        action(async () => ({ chosen: 'fallback' }));
+        fork(undefined, 'end');
+      });
       node('end', terminal());
       return { initial: 'split' };
     });
@@ -105,14 +118,18 @@ describe('pipeline.run() — execution flow', () => {
 
   it('unconditional fork acts as catch-all', async () => {
     const p = definePipeline('p', () => {
-      node('gate', {
-        forks: [
-          fork((ctx: Record<string, unknown>) => ctx.ok === true, 'yes'),
-          fork(undefined, 'no'),
-        ],
+      node('gate', () => {
+        fork((ctx: Record<string, unknown>) => ctx.ok === true, 'yes');
+        fork(undefined, 'no');
       });
-      node('yes', { action: async () => ({ chosen: 'yes' }), forks: [fork(undefined, 'end')] });
-      node('no', { action: async () => ({ chosen: 'no' }), forks: [fork(undefined, 'end')] });
+      node('yes', () => {
+        action(async () => ({ chosen: 'yes' }));
+        fork(undefined, 'end');
+      });
+      node('no', () => {
+        action(async () => ({ chosen: 'no' }));
+        fork(undefined, 'end');
+      });
       node('end', terminal());
       return { initial: 'gate' };
     });
@@ -122,8 +139,8 @@ describe('pipeline.run() — execution flow', () => {
 
   it('no matching fork produces status: stopped', async () => {
     const p = definePipeline('p', () => {
-      node('gate', {
-        forks: [fork((ctx: Record<string, unknown>) => Boolean(ctx.never), 'end')],
+      node('gate', () => {
+        fork((ctx: Record<string, unknown>) => Boolean(ctx.never), 'end');
       });
       node('end', terminal());
       return { initial: 'gate' };
@@ -135,13 +152,24 @@ describe('pipeline.run() — execution flow', () => {
 
   it('terminal node produces status: completed', async () => {
     const p = definePipeline('p', () => {
-      node('only', terminal({ action: async () => ({ done: true }) }));
+      node('only', terminal(async () => ({ done: true })));
       return { initial: 'only' };
     });
     const result = await p.run({});
     expect(result.status).toBe('completed');
     expect(result.finalNode).toBe('only');
     expect(result.context).toMatchObject({ done: true });
+  });
+
+  it('terminal node with final action merges patch before completion', async () => {
+    const p = definePipeline('p', () => {
+      node('start', () => { fork(undefined, 'end'); });
+      node('end', terminal(async () => ({ finalized: true })));
+      return { initial: 'start' };
+    });
+    const result = await p.run({});
+    expect(result.status).toBe('completed');
+    expect(result.context).toMatchObject({ finalized: true });
   });
 });
 
@@ -165,11 +193,11 @@ describe('pipeline run result shape', () => {
 describe('sub-pipeline embedding', () => {
   it('sub-pipeline context merges into parent', async () => {
     const sub = definePipeline('sub', () => {
-      node('work', terminal({ action: async () => ({ charged: true }) }));
+      node('work', terminal(async () => ({ charged: true })));
       return { initial: 'work' };
     });
     const parent = definePipeline('parent', () => {
-      node('start', { forks: [fork(undefined, sub)] });
+      node('start', () => { fork(undefined, sub); });
       return { initial: 'start' };
     });
     const result = await parent.run({});
@@ -180,7 +208,7 @@ describe('sub-pipeline embedding', () => {
 describe('errorPolicy', () => {
   it('default (throw) propagates errors', async () => {
     const p = definePipeline('p', () => {
-      node('boom', { action: async () => { throw new Error('boom'); }, forks: [] });
+      node('boom', () => { action(async () => { throw new Error('boom'); }); });
       return { initial: 'boom' };
     });
     await expect(p.run({})).rejects.toThrow('boom');
@@ -188,7 +216,7 @@ describe('errorPolicy', () => {
 
   it('return policy captures error in result', async () => {
     const p = definePipeline<Record<string, unknown>>('p', () => {
-      node('boom', { action: async () => { throw new Error('boom'); }, forks: [] });
+      node('boom', () => { action(async () => { throw new Error('boom'); }); });
       return { initial: 'boom' };
     }, { errorPolicy: 'return' });
     const result = await p.run({});
@@ -199,7 +227,7 @@ describe('errorPolicy', () => {
   it('trace-and-return records failed event and returns result', async () => {
     const tracer = createTracer();
     const p = definePipeline<Record<string, unknown>>('p', () => {
-      node('boom', { action: async () => { throw new Error('boom'); }, forks: [] });
+      node('boom', () => { action(async () => { throw new Error('boom'); }); });
       return { initial: 'boom' };
     }, { errorPolicy: 'trace-and-return', tracer });
     const result = await p.run({});

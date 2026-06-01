@@ -76,7 +76,7 @@ export type TracerOptions = {
 
 export type GraphNodeKind =
   | 'domain-state'
-  | 'domain-edge'
+  | 'domain-flow'
   | 'pipeline-node'
   | 'pipeline-fork'
   | 'pipeline';
@@ -100,7 +100,7 @@ export type GraphNode = {
 };
 
 export type GraphEdgeKind =
-  | 'domain-edge'
+  | 'domain-flow'
   | 'state-entry-pipeline'
   | 'state-exit-hook'
   | 'state-entry-hook'
@@ -299,49 +299,49 @@ export type GuardInput = {
   traceId: string;
 };
 
-export type TransitionActionInput = {
+export type OnActionInput = {
   event: string;
   payload?: unknown;
   traceId: string;
 };
 
-export type EdgeDef<TContext extends object = Record<string, unknown>> = {
+export type OnDef<TContext extends object = Record<string, unknown>> = {
   target: string;
   guard?: (ctx: TContext, input: GuardInput) => boolean | Promise<boolean>;
   action?: (
     ctx: TContext,
-    input: TransitionActionInput
+    input: OnActionInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>;
   pipeline?: Pipeline<TContext>;
   metadata?: Record<string, unknown>;
 };
 
-export type StateNodeDef<TContext extends object = Record<string, unknown>> = {
-  onEnter?: (
+export type WhenDef<TContext extends object = Record<string, unknown>> = {
+  enter?: (
     ctx: TContext,
     input: StateHookInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>;
-  onExit?: (
+  exit?: (
     ctx: TContext,
     input: StateHookInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>;
   pipeline?: Pipeline<TContext>;
-  edges?: Record<string, EdgeDef<TContext>>;
+  on?: Record<string, OnDef<TContext>>;
   terminal?: boolean;
   metadata?: Record<string, unknown>;
 };
 
 export type DomainConfig<
   TContext extends object = Record<string, unknown>,
-  TStates extends Record<string, StateNodeDef<TContext>> = Record<
+  TWhens extends Record<string, WhenDef<TContext>> = Record<
     string,
-    StateNodeDef<TContext>
+    WhenDef<TContext>
   >
 > = {
   context: TContext;
   initial: string;
   strict?: boolean;
-  states: TStates;
+  whens: TWhens;
   errorPolicy?: ErrorPolicy;
   merge?: (
     previous: TContext,
@@ -469,6 +469,13 @@ export type DefinePipelineOptions<
   ) => TContext;
 };
 
+// ─── Terminal Sentinel ───────────────────────────────────────────────────────
+
+declare const TERMINAL_BRAND: unique symbol;
+export type TerminalSentinel = { readonly [TERMINAL_BRAND]: true };
+
+// ─── Composable Helper Declarations ─────────────────────────────────────────
+
 export declare function defineDomain<
   TContext extends object,
   TEdges extends string = string
@@ -484,43 +491,70 @@ export declare function definePipeline<TContext extends object>(
   options?: DefinePipelineOptions<TContext>
 ): Pipeline<TContext>;
 
-export declare function state<TContext extends object>(
+export declare function when<TContext extends object>(
   id: string,
-  def: StateNodeDef<TContext>
+  x: (() => void) | TerminalSentinel
 ): void;
 
-export declare function edge<TContext extends object>(
-  def: EdgeDef<TContext>
-): EdgeDef<TContext>;
+export declare function enter<TContext extends object>(
+  fn: (
+    ctx: TContext,
+    input: StateHookInput
+  ) => PatchLike<TContext> | Promise<PatchLike<TContext>>
+): void;
+
+export declare function exit<TContext extends object>(
+  fn: (
+    ctx: TContext,
+    input: StateHookInput
+  ) => PatchLike<TContext> | Promise<PatchLike<TContext>>
+): void;
+
+export declare function on<TContext extends object>(
+  event: string,
+  def: OnDef<TContext>
+): void;
 
 export declare function node<TContext extends object>(
   id: string,
-  def: PipelineNodeDef<TContext>
+  x: (() => void) | TerminalSentinel
+): void;
+
+export declare function action<TContext extends object>(
+  fn: (
+    ctx: TContext,
+    input: PipelineActionInput
+  ) => PatchLike<TContext> | Promise<PatchLike<TContext>>
 ): void;
 
 export declare function fork<TContext extends object>(
-  condition: ((ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>) | undefined,
+  condition:
+    | ((ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>)
+    | undefined,
   target: string | Pipeline<TContext>,
   options?: { label?: string; metadata?: Record<string, unknown> }
-): PipelineForkDef<TContext>;
+): void;
 
 export declare function terminal<TContext extends object>(
-  def?: Omit<PipelineNodeDef<TContext>, 'terminal'>
-): PipelineNodeDef<TContext>;
+  fn?: (
+    ctx: TContext,
+    input: PipelineActionInput
+  ) => PatchLike<TContext> | Promise<PatchLike<TContext>>
+): TerminalSentinel;
 
 // ─── TypeScript Edge Inference Helpers ──────────────────────────────────────
 
-type ExtractEdges<TStates> = TStates extends Record<string, { edges?: infer E }>
+type ExtractEdges<TWhens> = TWhens extends Record<string, { on?: infer E }>
   ? E extends Record<string, unknown>
     ? keyof E
     : never
   : never;
 
-export type InferEdges<TConfig> = TConfig extends { states: infer TStates }
-  ? [ExtractEdges<TStates>] extends [never]
+export type InferEdges<TConfig> = TConfig extends { whens: infer TWhens }
+  ? [ExtractEdges<TWhens>] extends [never]
     ? string
-    : ExtractEdges<TStates> extends string
-      ? ExtractEdges<TStates>
+    : ExtractEdges<TWhens> extends string
+      ? ExtractEdges<TWhens>
       : string
   : string;
 
