@@ -27,12 +27,12 @@ const workflow = defineDomain('workflow', () => {
       // Step 2 — runs when leaving 'draft'
       return { leftAt: 'draft' };
     });
-    on('submit', {
-      target: 'review',
-      action: async (ctx) => {
+    on('submit', () => {
+      action(async (ctx) => {
         // Step 3 — ctx now has leftAt from exit
         return { submittedBy: 'user_1' };
-      },
+      });
+      return target('review');
     });
   });
 

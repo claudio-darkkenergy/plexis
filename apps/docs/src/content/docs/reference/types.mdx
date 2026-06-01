@@ -192,13 +192,13 @@ type Ctx = { count: number };
 
 const counter = defineDomain<Ctx>('counter', () => {
   when('active', () => {
-    on('increment', {
-      target: 'active',
-      action: (ctx) => ({ count: ctx.count + 1 }),
+    on('increment', () => {
+      action((ctx) => ({ count: ctx.count + 1 }));
+      return target('active');
     });
-    on('noop', {
-      target: 'active',
-      action: () => undefined, // returns void — no context change
+    on('noop', () => {
+      action(() => undefined); // returns void — no context change
+      return target('active');
     });
   });
   return { context: { count: 0 }, initial: 'active' };
@@ -273,7 +273,7 @@ import { createTracer, defineDomain, when, on, terminal } from '@tde.io/plexis';
 const tracer = createTracer({ captureContext: 'after' });
 const domain = defineDomain('order', () => {
   when('pending', () => {
-    on('submit', { target: 'done' });
+    on('submit', target('done'));
   });
   when('done', terminal());
   return { context: {}, initial: 'pending' };

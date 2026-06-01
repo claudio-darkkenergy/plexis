@@ -3,7 +3,7 @@ export { defineDomain, Domain } from './core/domain.js';
 export { definePipeline, Pipeline } from './core/pipeline.js';
 export { createTracer, Tracer } from './core/tracer.js';
 export { PlexisError } from './core/errors.js';
-export { when, enter, exit, on, node, action, fork, terminal } from './core/helpers.js';
+export { when, enter, exit, on, target, guard, pipeline, node, action, fork, terminal } from './core/helpers.js';
 
 // Type-only re-exports for consumers
 export type {
@@ -49,5 +49,9 @@ export type {
   PipelineSetupResult,
   DefinePipelineOptions,
   TerminalSentinel,
+  TargetDef,
+  OnSetupFn,
+  OnGuardInput,
+  PlexisErrorCode,
   InferEdges,
 } from './types.js';

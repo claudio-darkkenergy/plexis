@@ -81,4 +81,18 @@ export class PlexisError extends Error {
       { code: 'BUILDER_CLOSED' }
     );
   }
+
+  static duplicateRegistration(event: string, helper: string): PlexisError {
+    return new PlexisError(
+      `on('${event}') — ${helper}() was already registered for this handler. Each on() accepts a single ${helper}.`,
+      { code: 'DUPLICATE_REGISTRATION' }
+    );
+  }
+
+  static missingTarget(event: string): PlexisError {
+    return new PlexisError(
+      `on('${event}') — setup function did not return a target(). Use return target('state-id') as the last statement of the on() setup function.`,
+      { code: 'MISSING_TARGET' }
+    );
+  }
 }

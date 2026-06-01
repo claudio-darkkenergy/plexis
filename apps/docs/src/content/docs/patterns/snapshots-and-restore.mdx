@@ -12,10 +12,10 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('submit', { target: 'processing' });
+    on('submit', target('processing'));
   });
   when('processing', () => {
-    on('ship', { target: 'shipped' });
+    on('ship', target('shipped'));
   });
   when('shipped', terminal());
   return { context: { orderId: 'ord_1', items: 3 }, initial: 'pending' };
@@ -34,10 +34,10 @@ const snap = order.snapshot();
 ```typescript
 const order2 = defineDomain('order', () => {
   when('pending', () => {
-    on('submit', { target: 'processing' });
+    on('submit', target('processing'));
   });
   when('processing', () => {
-    on('ship', { target: 'shipped' });
+    on('ship', target('shipped'));
   });
   when('shipped', terminal());
   return { context: { orderId: '', items: 0 }, initial: 'pending' };

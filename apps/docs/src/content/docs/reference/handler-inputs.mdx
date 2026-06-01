@@ -25,12 +25,12 @@ type Ctx = { balance: number };
 
 const account = defineDomain<Ctx>('account', () => {
   when('active', () => {
-    on('withdraw', {
-      target: 'active',
-      guard: (ctx, input: GuardInput) => {
+    on('withdraw', () => {
+      guard((ctx, input: GuardInput) => {
         const amount = input.payload as number;
         return ctx.balance >= amount;
-      },
+      });
+      return target('active');
     });
   });
   return { context: { balance: 100 }, initial: 'active' };
@@ -59,12 +59,12 @@ type Ctx = { balance: number; lastEvent: string };
 
 const account = defineDomain<Ctx>('account', () => {
   when('active', () => {
-    on('deposit', {
-      target: 'active',
-      action: (ctx, input: OnActionInput) => ({
+    on('deposit', () => {
+      action((ctx, input: OnActionInput) => ({
         balance: ctx.balance + (input.payload as number),
         lastEvent: input.event,
-      }),
+      }));
+      return target('active');
     });
   });
   return { context: { balance: 0, lastEvent: '' }, initial: 'active' };
@@ -92,12 +92,12 @@ import type { StateHookInput } from '@tde.io/plexis';
 type Ctx = { enteredVia: string };
 
 const machine = defineDomain<Ctx>('machine', () => {
-  when('idle', () => { on('start', { target: 'running' }); });
+  when('idle', () => { on('start', target('running')); });
   when('running', () => {
     enter((ctx, input: StateHookInput) => ({
       enteredVia: input.event ?? 'initial',
     }));
-    on('stop', { target: 'idle' });
+    on('stop', target('idle'));
   });
   return { context: { enteredVia: '' }, initial: 'idle' };
 });

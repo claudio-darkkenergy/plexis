@@ -35,11 +35,11 @@ import { defineDomain, when, enter, exit, on, terminal } from '@tde.io/plexis';
 const door = defineDomain('door', () => {
   when('closed', () => {
     exit(async (ctx) => ({ lastClosed: Date.now() }));
-    on('open', { target: 'open' });
+    on('open', target('open'));
   });
   when('open', () => {
     enter(async (ctx) => ({ lastOpened: Date.now() }));
-    on('close', { target: 'closed' });
+    on('close', target('closed'));
   });
   return { context: { lastOpened: 0, lastClosed: 0 }, initial: 'closed' };
 });
@@ -106,12 +106,12 @@ type Ctx = { approved: boolean; approvedBy?: string };
 
 const approval = defineDomain<Ctx>('approval', () => {
   when('pending', () => {
-    on('approve', {
-      target: 'approved',
-      guard: (ctx, { payload }) => payload != null,
-      action: (ctx, { payload }) => ({ approvedBy: payload as string }),
+    on('approve', () => {
+      guard((ctx, { payload }) => payload != null);
+      action((ctx, { payload }) => ({ approvedBy: payload as string }));
+      return target('approved');
     });
-    on('reject', { target: 'rejected' });
+    on('reject', target('rejected'));
   });
   when('approved', terminal());
   when('rejected', terminal());

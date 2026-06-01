@@ -48,8 +48,8 @@ src/
 │   ├── tracer.ts               # Tracer class + createTracer factory
 │   ├── errors.ts               # PlexisError class + static factory helpers
 │   ├── context.ts              # mergePatch / applyMerge + MergeMetadata
-│   └── helpers.ts              # Registration helpers: when, enter, exit, on, node, action, fork, terminal
-│                                 + the nested builder-scope stack
+│   └── helpers.ts              # Registration helpers: when, enter, exit, on, target, guard, pipeline, node, action, fork, terminal
+│                                 + the nested builder-scope stack (domain | when | on | pipeline | node scopes)
 ├── graph/                      # Static graph layer (planned; created by bootstrap-plexis-core)
 │   ├── descriptor.ts           # GraphDescriptor builder
 │   ├── paths.ts                # pathsTo, pathsFrom, reachableFrom, inbound, outbound

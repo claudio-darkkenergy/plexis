@@ -14,11 +14,11 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const subscription = defineDomain('subscription', () => {
   when('trial', () => {
-    on('activate', { target: 'active' });
-    on('expire', { target: 'expired' });
+    on('activate', target('active'));
+    on('expire', target('expired'));
   });
   when('active', () => {
-    on('cancel', { target: 'cancelled' });
+    on('cancel', target('cancelled'));
   });
   when('expired', terminal());
   when('cancelled', terminal());
@@ -50,7 +50,7 @@ An unreachable state is one that no edge points to and that is not the `initial`
 ```typescript
 const broken = defineDomain('broken', () => {
   when('active', () => {
-    on('done', { target: 'done' });
+    on('done', target('done'));
   });
   when('done', terminal());
   // Nobody transitions to 'orphan' — it is unreachable
@@ -68,7 +68,7 @@ Set `strict: true` in the setup return value to turn graph integrity problems in
 ```typescript
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('submit', { target: 'processing' });
+    on('submit', target('processing'));
   });
   when('processing', terminal());
   // 'ghost' is unreachable

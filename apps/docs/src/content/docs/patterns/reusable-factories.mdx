@@ -15,11 +15,11 @@ type OrderCtx = { orderId: string; userId: string; total: number };
 function createOrderDomain(orderId: string, userId: string) {
   return defineDomain<OrderCtx>('order', () => {
     when('pending', () => {
-      on('submit', { target: 'processing' });
-      on('cancel', { target: 'cancelled' });
+      on('submit', target('processing'));
+      on('cancel', target('cancelled'));
     });
     when('processing', () => {
-      on('fulfill', { target: 'fulfilled' });
+      on('fulfill', target('fulfilled'));
     });
     when('fulfilled', terminal());
     when('cancelled', terminal());
@@ -95,7 +95,7 @@ const sendReceipt = definePipeline('send-receipt', () => {
 function createCheckout(storeId: string) {
   return defineDomain('checkout', () => {
     when('cart', () => {
-      on('pay', { target: 'paid', pipeline: sendReceipt });
+      on('pay', () => { pipeline(sendReceipt); return target('paid'); });
     });
     when('paid', terminal());
     return { context: { storeId }, initial: 'cart' };

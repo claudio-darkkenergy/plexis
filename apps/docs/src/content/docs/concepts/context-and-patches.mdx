@@ -16,9 +16,9 @@ type OrderCtx = { orderId: string; total: number; paid: boolean };
 
 const order = defineDomain<OrderCtx>('order', () => {
   when('pending', () => {
-    on('pay', {
-      target: 'paid',
-      action: async (ctx) => ({ paid: true }),
+    on('pay', () => {
+      action(async (ctx) => ({ paid: true }));
+      return target('paid');
     });
   });
   when('paid', terminal());

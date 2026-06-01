@@ -52,7 +52,7 @@ const tracer = createTracer({ captureContext: 'after', maxEvents: 500 });
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('submit', { target: 'processing' });
+    on('submit', target('processing'));
   });
   when('processing', terminal());
   return { context: {}, initial: 'pending' };

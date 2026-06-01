@@ -13,10 +13,10 @@ import { expect, test } from 'vitest';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('submit', { target: 'processing' });
+    on('submit', target('processing'));
   });
   when('processing', () => {
-    on('fulfill', { target: 'fulfilled' });
+    on('fulfill', target('fulfilled'));
   });
   when('fulfilled', terminal());
   return { context: { orderId: 'ord_1' }, initial: 'pending' };
@@ -75,10 +75,10 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const account = defineDomain('account', () => {
   when('open', () => {
-    on('withdraw', {
-      target: 'open',
-      guard: async (ctx) => ctx.balance >= ctx.amount,
-      action: async (ctx) => ({ balance: ctx.balance - ctx.amount }),
+    on('withdraw', () => {
+      guard(async (ctx) => ctx.balance >= ctx.amount);
+      action(async (ctx) => ({ balance: ctx.balance - ctx.amount }));
+      return target('open');
     });
   });
   return { context: { balance: 50, amount: 100 }, initial: 'open' };
@@ -135,7 +135,7 @@ A single domain instance accumulates state and history across calls. For isolate
 function makeOrder() {
   return defineDomain('order', () => {
     when('pending', () => {
-      on('submit', { target: 'processing' });
+      on('submit', target('processing'));
     });
     when('processing', terminal());
     return { context: {}, initial: 'pending' };

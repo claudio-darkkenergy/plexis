@@ -67,7 +67,7 @@ const checkout = definePipeline('checkout', () => {
 // Also attached to a domain state entry
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('pay', { target: 'paid' });
+    on('pay', target('paid'));
   });
   when('paid', terminal());
   return { context: {}, initial: 'pending' };

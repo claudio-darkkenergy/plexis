@@ -70,11 +70,11 @@ type RequestLifecycle = { requestId: string };
 function createRequestDomain(requestId: string) {
   return defineDomain<RequestLifecycle>('request', () => {
     when('pending', () => {
-      on('start', { target: 'processing' });
+      on('start', target('processing'));
     });
     when('processing', () => {
-      on('complete', { target: 'complete' });
-      on('fail', { target: 'failed' });
+      on('complete', target('complete'));
+      on('fail', target('failed'));
     });
     when('complete', terminal());
     when('failed', terminal());

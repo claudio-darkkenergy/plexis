@@ -16,11 +16,11 @@ type Ctx = { balance: number; amount: number };
 
 const account = defineDomain<Ctx>('account', () => {
   when('open', () => {
-    on('withdraw', {
-      target: 'open',
+    on('withdraw', () => {
       // Guard: block the transition entirely if there are insufficient funds
-      guard: async (ctx) => ctx.balance >= ctx.amount,
-      action: async (ctx) => ({ balance: ctx.balance - ctx.amount }),
+      guard(async (ctx) => ctx.balance >= ctx.amount);
+      action(async (ctx) => ({ balance: ctx.balance - ctx.amount }));
+      return target('open');
     });
   });
   return { context: { balance: 100, amount: 0 }, initial: 'open' };
@@ -93,11 +93,11 @@ const charge = definePipeline<Ctx>('charge', () => {
 
 const account = defineDomain<Ctx>('account', () => {
   when('open', () => {
-    on('withdraw', {
-      target: 'open',
-      guard: async (ctx) => ctx.balance >= ctx.amount, // blocks if insufficient
-      pipeline: charge, // runs if guard passes
-      action: async (ctx) => ({ balance: ctx.balance - ctx.amount }),
+    on('withdraw', () => {
+      guard(async (ctx) => ctx.balance >= ctx.amount); // blocks if insufficient
+      pipeline(charge); // runs if guard passes
+      action(async (ctx) => ({ balance: ctx.balance - ctx.amount }));
+      return target('open');
     });
   });
   return {

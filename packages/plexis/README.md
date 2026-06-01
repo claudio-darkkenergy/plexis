@@ -18,17 +18,15 @@ npm install @tde.io/plexis
 ## Quick Start
 
 ```typescript
-import { defineDomain, definePipeline, state, edge, node, fork, terminal } from '@tde.io/plexis';
+import { defineDomain, definePipeline, when, on, target, pipeline, node, fork, terminal } from '@tde.io/plexis';
 
 type OrderContext = { cardValid: boolean };
 
 // Pipeline: runs once per invocation — validate then route to charge or decline
 const payment = definePipeline<OrderContext>('payment', () => {
-  node('validate', {
-    forks: [
-      fork((ctx) => ctx.cardValid,  'charge',  { label: 'card-ok' }),
-      fork((ctx) => !ctx.cardValid, 'decline', { label: 'card-invalid' }),
-    ],
+  node('validate', () => {
+    fork((ctx) => ctx.cardValid,  'charge',  { label: 'card-ok' });
+    fork((ctx) => !ctx.cardValid, 'decline', { label: 'card-invalid' });
   });
   node('charge',  terminal());
   node('decline', terminal());
@@ -37,20 +35,21 @@ const payment = definePipeline<OrderContext>('payment', () => {
 
 // Domain: durable order state — pending → processing → fulfilled
 const order = defineDomain<OrderContext>('order', () => {
-  state('pending', {
-    edges: {
-      SUBMIT: edge({ target: 'processing', pipeline: payment }),
-    },
+  when('pending', () => {
+    on('submit', () => {
+      pipeline(payment);
+      return target('processing');
+    });
   });
-  state('processing', {
-    edges: { FULFILL: edge({ target: 'fulfilled' }) },
+  when('processing', () => {
+    on('fulfill', target('fulfilled'));
   });
-  state('fulfilled', { terminal: true });
+  when('fulfilled', terminal());
   return { context: { cardValid: true }, initial: 'pending' } as const;
 });
 
 // Drive the domain forward
-const result = await order.follow('SUBMIT');
+const result = await order.follow('submit');
 console.log(result.status); // 'followed'
 console.log(result.to);     // 'processing'
 ```

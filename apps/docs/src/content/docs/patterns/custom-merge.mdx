@@ -75,9 +75,9 @@ const cart = defineDomain<Ctx>(
   'cart',
   () => {
     when('open', () => {
-      on('add', {
-        target: 'open',
-        action: async (ctx, { payload }) => ({ items: [payload as string] }),
+      on('add', () => {
+        action(async (ctx, { payload }) => ({ items: [payload as string] }));
+        return target('open');
       });
     });
     return { context: { items: [] }, initial: 'open' };

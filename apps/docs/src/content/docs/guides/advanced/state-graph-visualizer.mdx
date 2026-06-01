@@ -14,11 +14,11 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('submit', { target: 'processing' });
+    on('submit', target('processing'));
   });
   when('processing', () => {
-    on('fulfill', { target: 'fulfilled' });
-    on('cancel', { target: 'cancelled' });
+    on('fulfill', target('fulfilled'));
+    on('cancel', target('cancelled'));
   });
   when('fulfilled', terminal());
   when('cancelled', terminal());

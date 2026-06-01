@@ -24,7 +24,7 @@ The project is in early implementation. So far:
 The public API uses setup functions with registration helpers instead of large config objects:
 
 ```ts
-import { defineDomain, definePipeline, when, on, enter, exit, node, action, fork, terminal } from 'plexis';
+import { defineDomain, definePipeline, when, on, target, guard, pipeline, enter, exit, node, action, fork, terminal } from 'plexis';
 
 const payment = definePipeline('payment', () => {
   node('validate-card', () => {
@@ -39,15 +39,47 @@ const payment = definePipeline('payment', () => {
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('submit', { target: 'processing', pipeline: payment });
+    // Setup function form: guard / action / pipeline inside, return target()
+    on('submit', () => {
+      pipeline(payment);
+      return target('processing');
+    });
+    // Simple form: on(event, target(id))
+    on('cancel', target('cancelled'));
   });
   when('processing', () => {});
+  when('cancelled', terminal());
   when('done', terminal());
   return { context: { orderId: null }, initial: 'pending', strict: true };
 });
 ```
 
 **Key difference from the old API:** setup functions run synchronously at definition time. Domain helpers (`when`, `enter`, `exit`, `on`) and pipeline helpers (`node`, `action`, `fork`, `terminal`) operate on a nested builder-scope stack opened by `defineDomain`/`definePipeline`. Calling them outside an active builder scope throws `PlexisError` with code `BUILDER_CLOSED`.
+
+### `on()` dual-form
+
+`on(event, def)` accepts two forms:
+- **Simple form**: `on('cancel', target('cancelled'))` — `target(id)` is a scope-independent sentinel that never throws `BUILDER_CLOSED`.
+- **Setup function form**: `on('submit', () => { guard(...); action(...); pipeline(p); return target('processing'); })` — a synchronous setup function that may call `guard`, `action`, and `pipeline` (each at most once), then **must** return `target(id)`. Returning no `target()` throws `MISSING_TARGET`.
+
+The `{ target: 'x', guard, action, pipeline }` object form has been **removed**.
+
+### `action()` scope rules
+
+`action(fn)` is valid in exactly three contexts:
+- Inside a `node` setup → node action, receives `PipelineActionInput` (`nodeId`, `pipelineId`, `input`, `traceId`)
+- Inside an `on` setup → transition action, receives `OnActionInput` (`event`, `payload`, `traceId`)
+- As the optional arg to `terminal(fn?)` → node-context final action, receives `PipelineActionInput`
+
+Called inside a `when` setup but outside any `on` or as the first arg to `terminal`, it throws `BUILDER_CLOSED`.
+
+### `guard` and `pipeline` are `on`-scoped
+
+`guard(fn)` and `pipeline(p)` are valid only inside an `on` setup function. Each may be called at most once per `on` setup. A second call to any of them (or `action`) in the same `on` throws `DUPLICATE_REGISTRATION`.
+
+### No-shadow rationale for ambient imports
+
+`guard`, `action`, and `pipeline` are single top-level imports reused in both `node` and `on` setups. Injected-argument forms (`({ action }) => {}`) were explicitly rejected to avoid shadowing the ambient import and breaking `no-shadow` lint rules.
 
 ## Architecture
 
@@ -99,7 +131,10 @@ Custom merge can be provided in `DefineDomainOptions` / `DefinePipelineOptions`.
 | `Pipeline<TContext>` | Runtime pipeline instance interface |
 | `DomainConfig` | Config shape for the internal builder |
 | `WhenDef` | Single state with flows (`on`), hooks (`enter`/`exit`), pipeline |
-| `OnDef` | Flow with guard, action, pipeline |
+| `OnDef` | Assembled flow (internal): target + optional guard/action/pipeline |
+| `TargetDef` | Scope-independent sentinel returned by `target(id)` |
+| `OnSetupFn` | Type of the setup function form: `() => TargetDef` |
+| `OnGuardInput` | Input to a guard registered via `guard(fn)` in an `on` setup |
 | `PipelineNodeDef` | Node with action, forks |
 | `PipelineForkDef` | Fork with condition, target, label |
 | `DomainFollowResult` | Return from `domain.follow()` |
@@ -107,6 +142,7 @@ Custom merge can be provided in `DefineDomainOptions` / `DefinePipelineOptions`.
 | `GraphDescriptor` | Static graph representation |
 | `NodeInspection` | Node + paths + attached pipelines |
 | `PlexisError` | Typed error with `code`, `domainId`, `pipelineId` |
+| `PlexisErrorCode` | Union of all documented error codes |
 
 ### TypeScript flow inference
 
@@ -114,7 +150,7 @@ Use `as const` to get typed `follow()` and `can()`:
 
 ```ts
 const order = defineDomain('order', () => {
-  when('pending', () => { on('submit', { target: 'processing' }); });
+  when('pending', () => { on('submit', target('processing')); });
   // ...
   return { context: {}, initial: 'pending' } as const;
 });

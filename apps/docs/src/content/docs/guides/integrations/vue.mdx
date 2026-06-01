@@ -58,7 +58,7 @@ type ToggleCtx = { count: number };
 
 const toggle = defineDomain<ToggleCtx>('toggle', () => {
   when('off', () => {
-    on('toggle', { target: 'on' });
+    on('toggle', target('on'));
   });
   when('on', () => {});
   return { context: { count: 0 }, initial: 'off' };

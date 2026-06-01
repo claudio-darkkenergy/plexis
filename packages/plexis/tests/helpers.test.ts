@@ -9,6 +9,9 @@ import {
   enter,
   exit,
   on,
+  target,
+  guard,
+  pipeline,
   node,
   action,
   fork,
@@ -80,7 +83,7 @@ describe('enter(), exit(), on()', () => {
   });
 
   it('on() throws BUILDER_CLOSED outside any scope', () => {
-    expect(() => on('submit', { target: 'x' })).toThrow(
+    expect(() => on('submit', target('x'))).toThrow(
       expect.objectContaining({ code: 'BUILDER_CLOSED' })
     );
   });
@@ -107,7 +110,7 @@ describe('enter(), exit(), on()', () => {
     const scope = domainScope();
     expect(() =>
       withScope(scope, () => {
-        on('submit', { target: 'x' });
+        on('submit', target('x'));
       })
     ).toThrow(expect.objectContaining({ code: 'BUILDER_CLOSED' }));
   });
@@ -120,7 +123,7 @@ describe('enter(), exit(), on()', () => {
       when('active', () => {
         enter(enterFn);
         exit(exitFn);
-        on('stop', { target: 'done' });
+        on('stop', target('done'));
       });
     });
     const def = scope.whens['active'] as any;
@@ -265,6 +268,68 @@ describe('terminal() — scope-independent sentinel', () => {
       node('end', terminal());
     });
     expect((scope.nodes['end'] as any).terminal).toBe(true);
+  });
+});
+
+describe('target() — scope-independent sentinel', () => {
+  it('does not throw outside any scope', () => {
+    expect(() => target('cancelled')).not.toThrow();
+  });
+
+  it('returns { __type: "TargetDef", id }', () => {
+    const t = target('cancelled');
+    expect(t).toEqual({ __type: 'TargetDef', id: 'cancelled' });
+  });
+
+  it('result is reusable as on() argument', () => {
+    const t = target('done');
+    const scope = domainScope();
+    withScope(scope, () => {
+      when('a', () => {
+        on('finish', t);
+      });
+    });
+    expect(scope.whens['a']?.on?.['finish']).toMatchObject({ target: 'done' });
+  });
+});
+
+describe('on() — simple target() form', () => {
+  it('builds a flow with target only, no guard/action/pipeline', () => {
+    const scope = domainScope();
+    withScope(scope, () => {
+      when('pending', () => {
+        on('cancel', target('cancelled'));
+      });
+    });
+    const flow = (scope.whens['pending'] as any).on['cancel'];
+    expect(flow.target).toBe('cancelled');
+    expect(flow.guard).toBeUndefined();
+    expect(flow.action).toBeUndefined();
+    expect(flow.pipeline).toBeUndefined();
+  });
+});
+
+describe('on() — setup-function form', () => {
+  it('registers guard, action, pipeline and returns target()', () => {
+    const scope = domainScope();
+    const guardFn = vi.fn();
+    const actionFn = vi.fn();
+    const fakePipeline = { id: 'pay', run: vi.fn(), describe: vi.fn(), graph: {} as any, trace: vi.fn(), inspectNode: vi.fn() };
+    withScope(scope, () => {
+      when('pending', () => {
+        on('submit', () => {
+          guard(guardFn);
+          action(actionFn);
+          pipeline(fakePipeline as any);
+          return target('processing');
+        });
+      });
+    });
+    const flow = (scope.whens['pending'] as any).on['submit'];
+    expect(flow.target).toBe('processing');
+    expect(flow.guard).toBe(guardFn);
+    expect(flow.action).toBe(actionFn);
+    expect(flow.pipeline).toBe(fakePipeline);
   });
 });
 

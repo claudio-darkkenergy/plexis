@@ -18,10 +18,10 @@ type OrderContext = { orderId: string | null };
 
 const order = defineDomain<OrderContext>('order', () => {
   when('pending', () => {
-    on('submit', { target: 'processing' });
+    on('submit', target('processing'));
   });
   when('processing', () => {
-    on('fulfill', { target: 'fulfilled' });
+    on('fulfill', target('fulfilled'));
   });
   when('fulfilled', terminal());
 
@@ -48,21 +48,28 @@ Pass `terminal()` as the second argument to register a terminal state with no fu
 
 ## Flows
 
-Register a flow on a state using `on(event, { target, guard?, action?, pipeline? })` inside a `when` setup:
+Register a flow on a state using `on(event, target(id))` (simple form) or `on(event, () => { ...; return target(id); })` (setup function form) inside a `when` setup:
 
 ```typescript
 when('pending', () => {
-  on('submit', {
-    target: 'processing',
-    guard: (ctx) => ctx.orderId !== null,
-    action: async (ctx) => ({ submitted: true }),
+  // Setup function form — attach guard, action, pipeline
+  on('submit', () => {
+    guard((ctx) => ctx.orderId !== null);
+    action(async (ctx) => ({ submitted: true }));
+    return target('processing');
   });
+  // Simple form — transition only
+  on('cancel', target('cancelled'));
 });
 ```
 
-The `guard` receives the current context and returns a boolean. If it returns `false`, the transition is blocked — no hooks or actions run.
+`guard(fn)` registers a guard predicate. If it returns `false`, the transition is blocked — no hooks or actions run.
 
-The `action` receives the current context and an `OnActionInput` (event name, payload, trace ID) and returns a context patch merged as `{ ...prev, ...patch }`.
+`action(fn)` registers a transition action. It receives the current context and an `OnActionInput` (event name, payload, trace ID) and returns a context patch merged as `{ ...prev, ...patch }`.
+
+`pipeline(p)` attaches a pipeline to run during the transition.
+
+Each of `guard`, `action`, and `pipeline` may be called at most once per `on` setup. A second call throws `DUPLICATE_REGISTRATION`.
 
 ## Lifecycle Hooks
 
@@ -77,7 +84,7 @@ when('processing', () => {
   exit(async (ctx) => {
     console.log('Leaving processing');
   });
-  on('fulfill', { target: 'fulfilled' });
+  on('fulfill', target('fulfilled'));
 });
 ```
 
@@ -177,7 +184,7 @@ Using `as const` on the setup return value lets TypeScript infer the exact set o
 
 ```typescript
 const order = defineDomain('order', () => {
-  when('pending', () => { on('submit', { target: 'processing' }); });
+  when('pending', () => { on('submit', target('processing')); });
   when('processing', terminal());
   return { context: {}, initial: 'pending' } as const;
 });

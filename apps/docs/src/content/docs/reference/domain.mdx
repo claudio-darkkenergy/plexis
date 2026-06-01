@@ -51,7 +51,7 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('submit', { target: 'processing' });
+    on('submit', target('processing'));
   });
   when('processing', terminal());
   return { context: { orderId: 'o1' }, initial: 'pending' };

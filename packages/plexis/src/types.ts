@@ -469,6 +469,26 @@ export type DefinePipelineOptions<
   ) => TContext;
 };
 
+// ─── Target Sentinel ─────────────────────────────────────────────────────────
+
+export type TargetDef = { __type: 'TargetDef'; id: string };
+export type OnSetupFn = () => TargetDef;
+export type OnGuardInput = { event: string; payload?: unknown; traceId: string };
+
+// ─── Error Codes ─────────────────────────────────────────────────────────────
+
+export type PlexisErrorCode =
+  | 'UNKNOWN_EVENT'
+  | 'STATE_MISMATCH'
+  | 'UNKNOWN_INITIAL_STATE'
+  | 'UNKNOWN_INITIAL_NODE'
+  | 'UNKNOWN_TARGET_STATE'
+  | 'UNKNOWN_TARGET_NODE'
+  | 'UNKNOWN_NODE'
+  | 'BUILDER_CLOSED'
+  | 'DUPLICATE_REGISTRATION'
+  | 'MISSING_TARGET';
+
 // ─── Terminal Sentinel ───────────────────────────────────────────────────────
 
 declare const TERMINAL_BRAND: unique symbol;
@@ -512,7 +532,17 @@ export declare function exit<TContext extends object>(
 
 export declare function on<TContext extends object>(
   event: string,
-  def: OnDef<TContext>
+  def: TargetDef | OnSetupFn
+): void;
+
+export declare function target(id: string): TargetDef;
+
+export declare function guard<TContext extends object>(
+  fn: (ctx: TContext, input: OnGuardInput) => boolean | Promise<boolean>
+): void;
+
+export declare function pipeline<TContext extends object>(
+  p: Pipeline<TContext>
 ): void;
 
 export declare function node<TContext extends object>(
@@ -523,7 +553,7 @@ export declare function node<TContext extends object>(
 export declare function action<TContext extends object>(
   fn: (
     ctx: TContext,
-    input: PipelineActionInput
+    input: PipelineActionInput | OnActionInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>
 ): void;
 
@@ -608,14 +638,14 @@ export declare class PipelineClass<TContext extends object = Record<string, unkn
 // ─── Errors ─────────────────────────────────────────────────────────────────
 
 export declare class PlexisError extends Error {
-  code: string;
+  code: PlexisErrorCode;
   domainId?: string;
   pipelineId?: string;
   nodeId?: string;
   context?: unknown;
 
   constructor(message: string, options?: {
-    code?: string;
+    code?: PlexisErrorCode;
     domainId?: string;
     pipelineId?: string;
     nodeId?: string;
@@ -630,4 +660,6 @@ export declare class PlexisError extends Error {
   static unknownTargetNode(pipelineId: string, fromNode: string, target: string): PlexisError;
   static unknownNode(id: string, node: string): PlexisError;
   static builderClosed(helperName: string): PlexisError;
+  static duplicateRegistration(event: string, helper: string): PlexisError;
+  static missingTarget(event: string): PlexisError;
 }

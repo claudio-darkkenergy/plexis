@@ -205,6 +205,48 @@ describe('sub-pipeline embedding', () => {
   });
 });
 
+describe('PipelineActionInput — node action and terminal action input shape', () => {
+  it('node action receives PipelineActionInput with nodeId, pipelineId, input, traceId', async () => {
+    let capturedInput: unknown;
+    const p = definePipeline('my-pipeline', () => {
+      node('validate-card', () => {
+        action(async (_ctx, input) => { capturedInput = input; return { seen: (input as any).nodeId }; });
+        fork(undefined, 'done');
+      });
+      node('done', terminal());
+      return { initial: 'validate-card' };
+    });
+    const runInput = { amount: 100 };
+    await p.run({}, runInput);
+    expect(capturedInput).toMatchObject({
+      nodeId: 'validate-card',
+      pipelineId: 'my-pipeline',
+      input: runInput,
+      traceId: expect.any(String),
+    });
+  });
+
+  it('terminal(fn) final action receives PipelineActionInput and merges patch before completed', async () => {
+    let capturedInput: unknown;
+    const p = definePipeline('my-pipeline', () => {
+      node('start', () => { fork(undefined, 'charge'); });
+      node('charge', terminal(async (_ctx, input) => {
+        capturedInput = input;
+        return { at: (input as any).nodeId };
+      }));
+      return { initial: 'start' };
+    });
+    const result = await p.run({});
+    expect(result.status).toBe('completed');
+    expect(result.context).toMatchObject({ at: 'charge' });
+    expect(capturedInput).toMatchObject({
+      nodeId: 'charge',
+      pipelineId: 'my-pipeline',
+      traceId: expect.any(String),
+    });
+  });
+});
+
 describe('errorPolicy', () => {
   it('default (throw) propagates errors', async () => {
     const p = definePipeline('p', () => {

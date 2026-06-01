@@ -27,15 +27,15 @@ type CheckoutCtx = {
 function createCheckoutDomain() {
   return defineDomain<CheckoutCtx>('checkout', () => {
     when('cart', () => {
-      on('setShipping', { target: 'address' });
+      on('setShipping', target('address'));
     });
     when('address', () => {
-      on('setPayment', { target: 'payment' });
-      on('back', { target: 'cart' });
+      on('setPayment', target('payment'));
+      on('back', target('cart'));
     });
     when('payment', () => {
-      on('confirm', { target: 'confirmed' });
-      on('back', { target: 'address' });
+      on('confirm', target('confirmed'));
+      on('back', target('address'));
     });
     when('confirmed', terminal());
 

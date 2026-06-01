@@ -12,7 +12,7 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('submit', { target: 'processing' });
+    on('submit', target('processing'));
   });
   when('processing', terminal());
   return { context: {}, initial: 'pending' };
@@ -31,12 +31,12 @@ import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('submit', { target: 'processing' });
-    on('cancel', { target: 'cancelled' });
+    on('submit', target('processing'));
+    on('cancel', target('cancelled'));
   });
   when('processing', () => {
-    on('fulfill', { target: 'fulfilled' });
-    on('cancel', { target: 'cancelled' });
+    on('fulfill', target('fulfilled'));
+    on('cancel', target('cancelled'));
   });
   when('fulfilled', terminal());
   when('cancelled', terminal());
@@ -80,12 +80,12 @@ type OrderEvent = 'submit' | 'cancel' | 'fulfill';
 const order = defineDomain<OrderCtx, OrderEvent>('order', () => {
   // TypeScript will error if you declare an edge that is not in OrderEvent
   when('pending', () => {
-    on('submit', { target: 'processing' });
-    on('cancel', { target: 'cancelled' });
+    on('submit', target('processing'));
+    on('cancel', target('cancelled'));
   });
   when('processing', () => {
-    on('fulfill', { target: 'fulfilled' });
-    on('cancel', { target: 'cancelled' });
+    on('fulfill', target('fulfilled'));
+    on('cancel', target('cancelled'));
   });
   when('fulfilled', terminal());
   when('cancelled', terminal());

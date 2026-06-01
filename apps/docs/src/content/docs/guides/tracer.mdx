@@ -35,7 +35,7 @@ const tracer = createTracer();
 
 const order = defineDomain('order', () => {
   when('pending', () => {
-    on('submit', { target: 'processing' });
+    on('submit', target('processing'));
   });
   when('processing', terminal());
   return { context: {}, initial: 'pending' } as const;
