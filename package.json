@@ -5,7 +5,9 @@
     "build": "pnpm --filter @tde.io/plexis run build",
     "test": "pnpm --filter @tde.io/plexis run test",
     "typecheck": "pnpm --filter @tde.io/plexis run typecheck",
-    "version": "pnpm -F @tde.io/plexis version",
+    "patch": "pnpm -F @tde.io/plexis version patch",
+    "minor": "pnpm -F @tde.io/plexis version minor",
+    "major": "pnpm -F @tde.io/plexis version major",
     "docs": "pnpm --filter @tde.io/docs run dev",
     "docs:build": "pnpm --filter @tde.io/docs run build"
   },
