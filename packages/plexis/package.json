@@ -1,6 +1,6 @@
 {
   "name": "@tde.io/plexis",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "description": "Zero-dependency TypeScript library for domain state machines and finite workflow pipelines",
   "license": "Apache-2.0",
   "author": "Claudio Nunez Jr",
