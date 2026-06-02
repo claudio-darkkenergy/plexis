@@ -1,12 +1,122 @@
 ## ADDED Requirements
 
+### Requirement: `on` is dual-form — `target()` sentinel or setup function
+
+Inside a `when` setup, an event handler SHALL be declared with `on(event, def)` where `def` is either the value returned by `target(id)` (simple form) or a synchronous setup function that returns `target(id)` (setup function form). There SHALL be no `{ target: 'x' }` object form. In the setup function form, the function MAY call the scoped helpers `guard(fn)`, `action(fn)`, and `pipeline(p)` and SHALL return `target(id)` to declare the transition's destination. A setup function that runs to completion without returning a `target()` value SHALL throw `PlexisError` with `code === 'MISSING_TARGET'`.
+
+#### Scenario: Simple form declares a transition with `target()`
+
+- **WHEN** a `when('pending', () => { on('cancel', target('cancelled')); })` setup is used
+- **THEN** the built `'pending'` state SHALL declare a flow on event `'cancel'` whose target is `'cancelled'`, with no guard, action, or pipeline attached
+
+#### Scenario: Setup function form registers guard, action, and pipeline and returns target
+
+- **WHEN** a setup uses `on('submit', () => { guard((ctx, input) => !!input.payload.orderId); action((ctx, input) => ({ orderId: input.payload.orderId })); pipeline(paymentPipeline); return target('processing'); })`
+- **THEN** the built flow on event `'submit'` SHALL carry the registered guard, action, and attached `paymentPipeline`, and SHALL target `'processing'`
+
+#### Scenario: `on` called outside an active `when` throws BUILDER_CLOSED
+
+- **WHEN** `on('submit', target('processing'))` is called directly in the `defineDomain` body (not inside a `when` setup) or outside any setup scope
+- **THEN** the call SHALL throw `PlexisError` with `code === 'BUILDER_CLOSED'`
+
+#### Scenario: Setup function that returns no `target()` throws MISSING_TARGET
+
+- **WHEN** a setup uses `on('submit', () => { action(a); /* no return */ })` so the setup function returns `undefined`
+- **THEN** the call SHALL throw `PlexisError` with `code === 'MISSING_TARGET'` naming event `'submit'`, and SHALL NOT throw `BUILDER_CLOSED`
+
+### Requirement: `target()` is a scope-independent sentinel
+
+`target(id)` SHALL return a static sentinel value of the shape `{ __type: 'TargetDef', id }`. It SHALL NOT register into any builder scope and SHALL NOT throw `BUILDER_CLOSED` regardless of where it is called.
+
+#### Scenario: `target()` called outside any setup does not throw
+
+- **WHEN** `target('cancelled')` is invoked at module top level with no active builder scope
+- **THEN** the call SHALL NOT throw and SHALL return `{ __type: 'TargetDef', id: 'cancelled' }`
+
+#### Scenario: `target()` result is reusable as an `on` argument
+
+- **WHEN** a `target('done')` value is captured and later passed as the second argument to `on('finish', target('done'))` inside a `when` setup
+- **THEN** the built flow SHALL target `'done'`
+
+### Requirement: `guard` and `pipeline` are `on`-scoped helpers
+
+The library SHALL export `guard(fn)` and `pipeline(p)` as top-level helpers active only inside an `on` setup function. `guard(fn)` SHALL register the transition's guard predicate; `pipeline(p)` SHALL attach a pipeline to run on the transition. Called outside an active `on` setup scope, either helper SHALL throw `PlexisError` with `code === 'BUILDER_CLOSED'`.
+
+#### Scenario: guard and pipeline register onto the enclosing transition
+
+- **WHEN** an `on('submit', () => { guard(g); pipeline(p); return target('processing'); })` setup is used
+- **THEN** the built `'submit'` flow SHALL carry guard `g` and attached pipeline `p`
+
+#### Scenario: guard called outside an `on` setup throws BUILDER_CLOSED
+
+- **WHEN** `guard((ctx) => true)` is called inside a `when` setup but outside any `on` setup, or at module top level
+- **THEN** the call SHALL throw `PlexisError` with `code === 'BUILDER_CLOSED'`
+
+#### Scenario: pipeline called outside an `on` setup throws BUILDER_CLOSED
+
+- **WHEN** `pipeline(somePipeline)` is called inside a `when` setup but outside any `on` setup, or at module top level
+- **THEN** the call SHALL throw `PlexisError` with `code === 'BUILDER_CLOSED'`
+
+### Requirement: `action` scope rules in domain authoring
+
+Inside an `on` setup function, `action(fn)` SHALL register the transition's action handler, and the handler SHALL receive `ActionInput` (`source`, `scope`, `payload`, `traceId`) as its `input` argument. In an `on` scope, `source` SHALL be the event name, `scope` SHALL be the originating state id (the `whenId` in which the `on` was declared), and `payload` SHALL be the event payload (which MAY be `undefined`, but the field SHALL always be present). `action(fn)` called inside a `when` setup but outside any `on` setup SHALL have no valid registration target and SHALL throw `PlexisError` with `code === 'BUILDER_CLOSED'`.
+
+#### Scenario: action inside `on` registers the transition action with ActionInput
+
+- **WHEN** an `on('submit', () => { action((ctx, input) => ({ via: input.source })); return target('processing'); })` setup is declared in state `'pending'` and the `'submit'` flow is later followed with a payload
+- **THEN** the registered action SHALL run as the flow action and its `input` SHALL carry `source === 'submit'`, `scope === 'pending'`, the `payload`, and a non-empty `traceId`
+
+#### Scenario: action directly inside `when` throws BUILDER_CLOSED
+
+- **WHEN** `action((ctx) => ({}))` is called inside a `when` setup but outside any `on` setup
+- **THEN** the call SHALL throw `PlexisError` with `code === 'BUILDER_CLOSED'`
+
+### Requirement: `guard`, `action`, and `pipeline` are single-slot per `on`
+
+Within a single `on` setup function, `guard`, `action`, and `pipeline` SHALL each be callable at most once. A second call to any of them during the same `on` setup SHALL throw `PlexisError` with `code === 'DUPLICATE_REGISTRATION'`, naming the event and the offending helper. This single-slot rule SHALL NOT apply to `fork` inside a `node` setup, which remains repeatable and order-sensitive.
+
+#### Scenario: Duplicate guard in one `on` throws DUPLICATE_REGISTRATION
+
+- **WHEN** an `on('submit', () => { guard(g1); guard(g2); return target('processing'); })` setup is evaluated
+- **THEN** the second `guard` call SHALL throw `PlexisError` with `code === 'DUPLICATE_REGISTRATION'`
+
+#### Scenario: Duplicate action in one `on` throws DUPLICATE_REGISTRATION
+
+- **WHEN** an `on('submit', () => { action(a1); action(a2); return target('processing'); })` setup is evaluated
+- **THEN** the second `action` call SHALL throw `PlexisError` with `code === 'DUPLICATE_REGISTRATION'`
+
+#### Scenario: Duplicate pipeline in one `on` throws DUPLICATE_REGISTRATION
+
+- **WHEN** an `on('submit', () => { pipeline(p1); pipeline(p2); return target('processing'); })` setup is evaluated
+- **THEN** the second `pipeline` call SHALL throw `PlexisError` with `code === 'DUPLICATE_REGISTRATION'`
+
+### Requirement: Imperative domain authoring with `when`, `enter`, `exit`, and `on`
+
+States SHALL be declared inside a `defineDomain` setup function using `when(id, fn | terminal())`. When the second argument is a synchronous setup function, that function MAY call the scoped helpers `enter(fn)`, `exit(fn)`, and `on(event, def)` to register the state's entry hook, exit hook, and event handlers respectively. The `on` handler's `def` SHALL be either a `target(id)` sentinel or a synchronous setup function that returns `target(id)`; there SHALL be no `{ target: 'x' }` object form. When the second argument to `when` is the value returned by `terminal()`, the state SHALL be registered as terminal with no further behavior. There SHALL be no `state` helper, no standalone `edge` helper, no `edges: {}` object key, and no `onEnter`/`onExit` keys.
+
+#### Scenario: Setup function registers states via `when`, `on`, `enter`, `exit`
+
+- **WHEN** a `setup` function calls `when('pending', () => { on('SUBMIT', target('processing')); })` and `when('processing', terminal())`, then returns `{ context: {}, initial: 'pending' }`
+- **THEN** the resulting Domain SHALL have `state === 'pending'`, two registered states in `describe()`, one declared flow from `'pending'` to `'processing'` on event `'SUBMIT'`, and `'processing'` flagged terminal
+
+#### Scenario: `enter` and `exit` register lifecycle hooks scoped to the state
+
+- **WHEN** a `when('active', () => { enter((ctx) => ({ entered: true })); exit((ctx) => ({ left: true })); on('STOP', target('active')); })` setup is used
+- **THEN** the built state SHALL carry the entry hook, the exit hook, and the `STOP` handler
+
+#### Scenario: Scoped helpers called outside an active `when` throw BUILDER_CLOSED
+
+- **WHEN** `on('SUBMIT', target('x'))`, `enter(fn)`, or `exit(fn)` is called directly in the `defineDomain` body (not inside a `when` setup) or outside any setup scope
+- **THEN** the call SHALL throw `PlexisError` with `code === 'BUILDER_CLOSED'`
+
+#### Scenario: `terminal()` is a scope-independent sentinel
+
+- **WHEN** `terminal()` is invoked outside any active builder scope and its result is later passed as the second argument to `when('done', terminal())`
+- **THEN** `terminal()` SHALL NOT throw `BUILDER_CLOSED`, and `'done'` SHALL be registered as a terminal state
+
 ### Requirement: Composable Domain construction with class equivalence
 
-The system SHALL expose `defineDomain(id, setup, options?)` as the primary authoring API and `new Domain(id, setup, options?)` for advanced use (subclassing, explicit instance construction). Both SHALL accept the same arguments, route through a single internal builder (`buildDomain`), and produce instances satisfying the `Domain<TContext, TEdges>` interface declared in `src/types.ts`. Both SHALL produce identical runtime behavior, identical `GraphDescriptor` output from `describe()`, and identical trace output for the same inputs.
-
-The `setup` function SHALL be synchronous. During its execution, the registration helpers `state()`, `edge()`, `onEnter()` / `onExit()` (where applicable), and any other documented helpers SHALL be callable to register state nodes and edges into the active builder scope. After `setup` returns, the builder SHALL be sealed and SHALL throw `PlexisError` with `code === 'BUILDER_CLOSED'` if any registration helper is invoked thereafter.
-
-The `setup` return value SHALL provide the root configuration: `{ context, initial, strict?, errorPolicy? }`.
+The library SHALL expose `defineDomain(id, setup, options?)` and an equivalent `Domain` class constructor. The `setup` function SHALL run synchronously at definition time, registering states via `when` and event handlers via `on`. Calling scope-sensitive helpers outside an active setup scope SHALL throw `PlexisError` with `code === 'BUILDER_CLOSED'`.
 
 #### Scenario: defineDomain and new Domain produce identical instances
 
@@ -15,72 +125,72 @@ The `setup` return value SHALL provide the root configuration: `{ context, initi
 
 #### Scenario: Setup function registers states via helpers
 
-- **WHEN** a `setup` function calls `state('pending', { edges: { SUBMIT: edge({ target: 'processing' }) } })` and `state('processing', { edges: {} })`, then returns `{ context: {}, initial: 'pending' }`
-- **THEN** the resulting Domain SHALL have `state === 'pending'`, two registered states in `describe()`, and one declared edge from `'pending'` to `'processing'` on event `'SUBMIT'`
+- **WHEN** a `setup` function calls `when('pending', () => { on('SUBMIT', target('processing')); })` and `when('processing', terminal())`, then returns `{ context: {}, initial: 'pending' }`
+- **THEN** the resulting Domain SHALL have `state === 'pending'`, two registered states in `describe()`, and one declared flow from `'pending'` to `'processing'` on event `'SUBMIT'`
 
 #### Scenario: Helpers called outside setup throw BUILDER_CLOSED
 
-- **WHEN** a caller invokes `state('orphan', { edges: {} })` outside any active `defineDomain` or `new Domain` setup scope
+- **WHEN** a caller invokes `when('orphan', () => {})` outside any active `defineDomain` or `new Domain` setup scope
 - **THEN** the call SHALL throw `PlexisError` with `code === 'BUILDER_CLOSED'`
 
 #### Scenario: Helpers called after setup returns throw BUILDER_CLOSED
 
-- **WHEN** a `setup` function captures a reference and after returning calls `state('late', { edges: {} })` from an async callback
+- **WHEN** a `setup` function captures a reference and after returning calls `when('late', () => {})` from an async callback
 - **THEN** the deferred call SHALL throw `PlexisError` with `code === 'BUILDER_CLOSED'` and SHALL NOT modify the already-sealed Domain
 
 ### Requirement: State transitions via `follow`
 
-The Domain SHALL transition between states only in response to `follow(event, payload?)`. The result SHALL be a `DomainFollowResult` with `status` of `'followed'`, `'blocked'`, `'ignored'`, or `'error'`, plus `event`, `from`, optional `to`, `context`, and `traceId`.
+The current state SHALL declare an outgoing flow for an event via `on(event, target(id))` or `on(event, () => { ...; return target(id); })`. `follow(event, payload)` SHALL traverse the matching flow when no guard is present or the guard passes.
 
-#### Scenario: Successful event follows the matching edge
+#### Scenario: Successful event follows the matching flow
 
-- **WHEN** the current state has an edge declared for `event` with no guard or a passing guard
-- **THEN** `follow(event, payload)` SHALL return `status: 'followed'` with `to` equal to the edge's target and the Domain's `state` SHALL be updated to that target
+- **WHEN** the current state has a flow declared for `event` with no guard or a passing guard
+- **THEN** `follow(event, payload)` SHALL return `status: 'followed'` with `to` equal to the flow's target and the Domain's `state` SHALL be updated to that target
 
 #### Scenario: Unknown event in non-strict mode is ignored
 
 - **WHEN** the Domain is constructed with `strict: false` and `follow(unknownEvent)` is called
 - **THEN** the result SHALL have `status: 'ignored'`, the Domain's `state` SHALL be unchanged, and no error SHALL be thrown
 
-### Requirement: Guard evaluation blocks edge traversal
+### Requirement: Guard evaluation blocks flow traversal
 
-When an edge declares a `guard`, the guard SHALL be invoked with the current context and a `GuardInput`. If the guard returns or resolves to `false`, the edge SHALL NOT be followed; no `onExit`, action, edge pipeline, `onEnter`, or state pipeline SHALL run; and the state SHALL remain unchanged.
+A guard declared on a flow via `on(event, () => { guard(fn); return target(id); })` SHALL be evaluated before any side effects. A guard that returns a falsy value SHALL block traversal with no observable side effects.
 
 #### Scenario: Failing guard blocks the transition
 
-- **WHEN** an edge's guard returns `false`
-- **THEN** the `follow` result SHALL have `status: 'blocked'`, `to` SHALL be omitted, and no side effects from `onExit`, edge action, edge pipeline, `onEnter`, or state pipeline SHALL be observable
+- **WHEN** a flow's guard returns `false`
+- **THEN** the `follow` result SHALL have `status: 'blocked'`, `to` SHALL be omitted, and no side effects from `exit`, the flow action, the flow pipeline, `enter`, or the state entry pipeline SHALL be observable
 
-### Requirement: Documented execution order on edge traversal
+### Requirement: Documented execution order on flow traversal
 
-On a successful (guard-passed) `follow`, the runtime SHALL execute the following steps in this exact order before notifying subscribers: (1) `onExit` of the current state, (2) edge action, (3) edge pipeline, (4) update of `state` to target, (5) `onEnter` of the target state, (6) state entry pipeline of the target, (7) history record, (8) subscriber notification.
+On a successful `follow`, patches SHALL be merged in the documented order: `exit` (current state), flow action, flow pipeline, `enter` (target state), state entry pipeline.
 
 #### Scenario: Patches are applied in declared order
 
-- **WHEN** `onExit` returns `{ a: 1 }`, edge action returns `{ b: 2 }`, edge pipeline produces `{ c: 3 }`, `onEnter` returns `{ a: 9 }`, and state entry pipeline produces `{ d: 4 }`
+- **WHEN** `exit` returns `{ a: 1 }`, the flow action returns `{ b: 2 }`, the flow pipeline produces `{ c: 3 }`, `enter` returns `{ a: 9 }`, and the state entry pipeline produces `{ d: 4 }`
 - **THEN** the resulting context SHALL contain `{ a: 9, b: 2, c: 3, d: 4 }` reflecting the documented merge order
 
-### Requirement: Lifecycle hooks `onEnter` and `onExit`
+### Requirement: Lifecycle hooks `enter` and `exit`
 
-Each state node MAY declare `onEnter` and `onExit` handlers. They SHALL receive the current context and a `StateHookInput` with `event`, optional `payload`, and `traceId`. They SHALL return a patch (or `void`/`null`/`undefined` for no change).
+States MAY declare entry and exit hooks via `enter(fn)` and `exit(fn)` inside their `when` setup. The `enter` hook of the initial state SHALL run once at construction.
 
-#### Scenario: onEnter runs on initial state at construction
+#### Scenario: enter runs on initial state at construction
 
-- **WHEN** a Domain is constructed with `initial: 'pending'` and `pending` declares `onEnter`
-- **THEN** `onEnter` SHALL be invoked once at construction time and any returned patch SHALL be merged into the initial context
+- **WHEN** a Domain is constructed with `initial: 'pending'` and `'pending'` declares an `enter` hook
+- **THEN** the `enter` hook SHALL be invoked once at construction time and any returned patch SHALL be merged into the initial context
 
 ### Requirement: `can` introspection
 
-`domain.can(event, payload?)` SHALL return `true` only if the current state declares an edge for `event` and, if a guard is present, the guard returns or resolves to `true`. It SHALL NOT cause any state transition or side effect.
+`can(event)` SHALL report whether the current state can follow `event`, evaluating any guard declared on the matching flow.
 
-#### Scenario: can returns false when no matching edge exists
+#### Scenario: can returns false when no matching flow exists
 
-- **WHEN** the current state declares no edge for `event`
+- **WHEN** the current state declares no flow for `event`
 - **THEN** `can(event)` SHALL return `false`
 
 #### Scenario: can returns false when the guard rejects
 
-- **WHEN** the current state declares an edge for `event` with a guard that returns `false`
+- **WHEN** the current state declares a flow for `event` with a guard that returns `false`
 - **THEN** `can(event)` SHALL return `false` and the Domain's state SHALL remain unchanged
 
 ### Requirement: `followFrom` asserts current state

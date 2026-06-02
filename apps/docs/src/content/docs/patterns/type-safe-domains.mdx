@@ -1,0 +1,108 @@
+---
+title: Type-Safe Domains
+description: Use as const on your domain config to get typed follow() and can() — TypeScript will reject unknown event names at compile time.
+---
+
+By default, `domain.follow()` and `domain.can()` accept any `string` as the event name. Add `as const` to your setup return value and TypeScript narrows those calls to the exact events you declared, turning typos and missing events into compile-time errors.
+
+## The default: `follow()` accepts any string
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+const order = defineDomain('order', () => {
+  when('pending', () => {
+    on('submit', target('processing'));
+  });
+  when('processing', terminal());
+  return { context: {}, initial: 'pending' };
+});
+
+// No error — TEdges defaults to string
+await order.follow('typoEvent');
+```
+
+The domain will return `status: 'ignored'` at runtime, but TypeScript won't catch it.
+
+## Adding `as const` for typed events
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+const order = defineDomain('order', () => {
+  when('pending', () => {
+    on('submit', target('processing'));
+    on('cancel', target('cancelled'));
+  });
+  when('processing', () => {
+    on('fulfill', target('fulfilled'));
+    on('cancel', target('cancelled'));
+  });
+  when('fulfilled', terminal());
+  when('cancelled', terminal());
+
+  return { context: {}, initial: 'pending' } as const;
+  //                                          ^^^^^^^^
+  //  as const narrows the return type so TypeScript can infer the edge keys
+});
+
+await order.follow('submit'); // OK
+await order.follow('fulfill'); // OK
+await order.follow('cancel'); // OK
+
+// @ts-expect-error — 'typo' is not a known event
+await order.follow('typo');
+```
+
+`as const` tells TypeScript to keep string literal types rather than widening them to `string`. The `defineDomain` generic infers `TEdges` from the setup return, and `follow(event: TEdges)` then only accepts valid literals.
+
+## Typed `can()`
+
+`domain.can()` gets the same narrowing:
+
+```typescript
+// Both are typed as boolean | Promise<boolean>
+const canSubmit = await order.can('submit'); // OK
+const canFulfill = await order.can('fulfill'); // OK
+
+// @ts-expect-error
+const canFoo = await order.can('foo');
+```
+
+## Explicit generic for extra safety
+
+For the strictest setup, pass the context type and constrain the edge type explicitly:
+
+```typescript
+type OrderCtx = { orderId: string };
+type OrderEvent = 'submit' | 'cancel' | 'fulfill';
+
+const order = defineDomain<OrderCtx, OrderEvent>('order', () => {
+  // TypeScript will error if you declare an edge that is not in OrderEvent
+  when('pending', () => {
+    on('submit', target('processing'));
+    on('cancel', target('cancelled'));
+  });
+  when('processing', () => {
+    on('fulfill', target('fulfilled'));
+    on('cancel', target('cancelled'));
+  });
+  when('fulfilled', terminal());
+  when('cancelled', terminal());
+  return { context: { orderId: '' }, initial: 'pending' };
+});
+```
+
+Explicit generics also make the domain type clear when you pass it to a function:
+
+```typescript
+function submitOrder(d: import('@tde.io/plexis').Domain<OrderCtx, OrderEvent>) {
+  return d.follow('submit');
+}
+```
+
+## `as const` on deeply nested configs
+
+`as const` works across the entire return value. If your context shape or other setup options need literal narrowing, apply it to the whole return object rather than to individual pieces.
+
+For the `defineDomain` generic signatures, see the [Definition Functions reference](/reference/definition-functions).

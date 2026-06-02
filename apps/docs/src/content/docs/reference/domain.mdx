@@ -1,0 +1,323 @@
+---
+title: Domain Instance
+description: Reference for Domain instance members and the DomainGraph query API.
+---
+
+`Domain` — returned by `defineDomain()`. Represents a running state machine with durable context, history, and graph introspection.
+
+## Properties
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `id` | `string` | Domain identifier |
+| `state` | `string` | Current state ID |
+| `context` | `TContext` | Current context (immutable; updated via transitions) |
+| `current` | `CurrentStateNode<TContext, TEdges>` | Scoped view of the current state; see below |
+| `graph` | `DomainGraph` | Graph query API; see [DomainGraph methods](#domaingraph-methods) |
+
+`CurrentStateNode` fields:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `state` | `string` | Current state ID |
+| `context` | `TContext` | Current context |
+| `can(event, payload?)` | `(event: TEdges, payload?: unknown) => boolean \| Promise<boolean>` | Check if a transition is allowed |
+| `follow(event, payload?)` | `(event: TEdges, payload?: unknown) => Promise<DomainFollowResult>` | Trigger a transition |
+
+---
+
+## `domain.follow(event, payload?)`
+
+Trigger a state transition.
+
+### Parameters
+
+**`event`** `TEdges`
+
+Event name.
+
+**`payload`** `unknown` *(optional)*
+
+Optional event payload passed to guards, actions, and hooks.
+
+### Return value
+
+`Promise<DomainFollowResult<TContext>>` — see [DomainFollowResult](/reference/types#domainfollowresult).
+
+### Example
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+const order = defineDomain('order', () => {
+  when('pending', () => {
+    on('submit', target('processing'));
+  });
+  when('processing', terminal());
+  return { context: { orderId: 'o1' }, initial: 'pending' };
+});
+
+const result = await order.follow('submit', { userId: 'u1' });
+console.log(result.status); // 'followed'
+console.log(order.state);   // 'processing'
+```
+
+---
+
+## `domain.followFrom(state, event, payload?)`
+
+Trigger a transition from a specific state. Throws `STATE_MISMATCH` if the current state does not match.
+
+### Parameters
+
+**`state`** `string`
+
+Expected current state ID.
+
+**`event`** `TEdges`
+
+Event name.
+
+**`payload`** `unknown` *(optional)*
+
+Optional event payload.
+
+### Return value
+
+`Promise<DomainFollowResult<TContext>>`
+
+### Example
+
+```typescript
+// Only proceeds if domain is currently in 'pending'
+const result = await order.followFrom('pending', 'submit');
+```
+
+---
+
+## `domain.can(event, payload?)`
+
+Check if a transition is allowed without running any side effects.
+
+### Parameters
+
+**`event`** `TEdges`
+
+Event name.
+
+**`payload`** `unknown` *(optional)*
+
+Optional event payload passed to the guard.
+
+### Return value
+
+`boolean | Promise<boolean>`
+
+### Example
+
+```typescript
+const allowed = await order.can('submit');
+if (allowed) {
+  await order.follow('submit');
+}
+```
+
+---
+
+## `domain.subscribe(listener)`
+
+Subscribe to state changes. The listener is called after each successful transition.
+
+### Parameters
+
+**`listener`** `(snapshot: DomainSnapshot<TContext>) => void`
+
+Called after each successful transition.
+
+### Return value
+
+`() => void` — call to unsubscribe.
+
+### Example
+
+```typescript
+const unsubscribe = order.subscribe((snapshot) => {
+  console.log('transitioned to:', snapshot.state);
+  console.log('context:', snapshot.context);
+});
+
+await order.follow('submit');
+// listener fires here
+
+unsubscribe();
+```
+
+---
+
+## `domain.snapshot()`
+
+Capture the current state, context, and history length.
+
+### Return value
+
+`DomainSnapshot<TContext>` — see [DomainSnapshot](/reference/types#domainsnapshot).
+
+### Example
+
+```typescript
+const snap = order.snapshot();
+// { state: 'pending', context: { orderId: 'o1' }, historyLength: 0 }
+```
+
+---
+
+## `domain.restore(snapshot)`
+
+Restore from a previously captured snapshot.
+
+### Parameters
+
+**`snapshot`** `DomainSnapshot<TContext>`
+
+Snapshot captured via `domain.snapshot()`.
+
+### Return value
+
+None (`void`).
+
+### Example
+
+```typescript
+const snap = order.snapshot();
+await order.follow('submit');
+
+// Roll back:
+order.restore(snap);
+console.log(order.state); // 'pending'
+```
+
+---
+
+## `domain.history()`
+
+Return all recorded transitions.
+
+### Return value
+
+`DomainHistoryEntry<TContext>[]` — see [DomainHistoryEntry](/reference/types#domainhistoryentry).
+
+### Example
+
+```typescript
+await order.follow('submit');
+const history = order.history();
+console.log(history[0].from);  // 'pending'
+console.log(history[0].to);    // 'processing'
+console.log(history[0].event); // 'submit'
+```
+
+---
+
+## `domain.describe()`
+
+Return a static graph descriptor.
+
+### Return value
+
+`GraphDescriptor` — see [GraphDescriptor](/reference/types#graphdescriptor).
+
+### Example
+
+```typescript
+const descriptor = order.describe();
+console.log(descriptor.nodes.map((n) => n.id)); // ['pending', 'processing']
+```
+
+---
+
+## `domain.trace(format?)`
+
+Export trace data for this domain.
+
+### Parameters
+
+**`format`** `'json' | 'text' | 'tree'` *(optional)*
+
+Export format.
+
+### Return value
+
+`unknown`
+
+### Example
+
+```typescript
+const json = order.trace('json');
+const tree = order.trace('tree');
+```
+
+---
+
+## `domain.inspectNode(node, options?)`
+
+Inspect a node's paths and attached pipelines.
+
+### Parameters
+
+**`node`** `string | GraphNodeRef`
+
+Node ID or graph node reference.
+
+**`options`** `PathQueryOptions` *(optional)*
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `maxDepth` | `number` | No | Maximum path depth to traverse |
+| `includeCycles` | `boolean` | No | When `true`, cyclic paths are included in results |
+| `includeCrossBoundary` | `boolean` | No | When `true`, paths crossing domain/pipeline boundaries are included |
+| `direction` | `'inbound' \| 'outbound'` | No | Traversal direction for reachability queries |
+
+### Return value
+
+`NodeInspection` — see [NodeInspection](/reference/types#nodeinspection).
+
+### Example
+
+```typescript
+const info = order.inspectNode('pending');
+console.log(info.outbound.map((e) => e.label)); // outbound edges from 'pending'
+console.log(info.pathsFrom.length);             // number of paths from 'pending'
+```
+
+---
+
+## `DomainGraph` methods
+
+Accessed via `domain.graph`.
+
+| Method | Parameters | Returns | Description |
+| --- | --- | --- | --- |
+| `describe()` | — | `GraphDescriptor` | Static graph descriptor for this domain |
+| `node(id)` | `id: string` | `GraphNode \| undefined` | Look up a graph node by ID |
+| `inbound(id)` | `id: string` | `GraphEdge[]` | All edges pointing to the given node |
+| `outbound(id)` | `id: string` | `GraphEdge[]` | All edges pointing from the given node |
+| `pathsTo(id, options?)` | `id: string, options?: PathQueryOptions` | `GraphPath[]` | All paths leading to the given node |
+| `pathsFrom(id, options?)` | `id: string, options?: PathQueryOptions` | `GraphPath[]` | All paths starting from the given node |
+| `reachableFrom(id, options?)` | `id: string, options?: PathQueryOptions` | `GraphNode[]` | All nodes reachable from the given node |
+| `observedPathsTo(id)` | `id: string` | `GraphPath[]` | Paths to the given node observed at runtime |
+| `observedPathsFrom(id)` | `id: string` | `GraphPath[]` | Paths from the given node observed at runtime |
+
+### Example
+
+```typescript
+const graph = order.graph;
+
+// Static queries:
+const node = graph.node('pending');
+const edges = graph.outbound('pending');
+const paths = graph.pathsFrom('pending', { maxDepth: 3 });
+const reachable = graph.reachableFrom('pending');
+
+// Runtime-observed queries (populated after transitions run):
+const observedPaths = graph.observedPathsFrom('pending');
+```

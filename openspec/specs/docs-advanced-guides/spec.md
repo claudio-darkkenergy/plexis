@@ -1,13 +1,16 @@
-## ADDED Requirements
+# Docs Advanced Guides Spec
+
+## Requirements
 
 ### Requirement: Advanced guides live under `guides/advanced/`
 
-The docs site SHALL contain an `advanced/` subdirectory under `apps/docs/src/content/docs/guides/` holding exactly four MDX guides: `api-route.mdx`, `multi-step-form.mdx`, `react.mdx`, and `vue.mdx`. Each file MUST have Starlight frontmatter with a `title` and a `description`.
+The docs site SHALL contain an `advanced/` subdirectory under `apps/docs/src/content/docs/guides/` holding exactly five MDX guides: `api-route.mdx`, `multi-step-form.mdx`, `saga.mdx`, `persist-and-rehydrate.mdx`, and `state-graph-visualizer.mdx`. The Advanced bucket SHALL hold only framework-neutral, multi-primitive worked examples whose subject is a scenario to build; framework-specific guides (React, Vue) live under `guides/integrations/`. Each file MUST have Starlight frontmatter with a `title` and a `description`.
 
-#### Scenario: All four advanced guide files exist
+#### Scenario: All five advanced guide files exist
 
 - **WHEN** a developer lists `apps/docs/src/content/docs/guides/advanced/`
-- **THEN** the directory contains `api-route.mdx`, `multi-step-form.mdx`, `react.mdx`, and `vue.mdx`
+- **THEN** the directory contains `api-route.mdx`, `multi-step-form.mdx`, `saga.mdx`, `persist-and-rehydrate.mdx`, and `state-graph-visualizer.mdx`
+- **AND** the directory does not contain `react.mdx` or `vue.mdx`
 - **AND** each file begins with frontmatter declaring a non-empty `title` and `description`
 
 #### Scenario: Each guide is self-contained
@@ -15,19 +18,19 @@ The docs site SHALL contain an `advanced/` subdirectory under `apps/docs/src/con
 - **WHEN** a developer reads any one advanced guide
 - **THEN** that guide includes a complete runnable code example that does not depend on types, variables, or setup defined in another guide
 
-### Requirement: Advanced sidebar section is ordered between Guides and Reference
+### Requirement: Advanced sidebar section is ordered between Patterns and Integrations
 
-The Starlight sidebar in `apps/docs/astro.config.mjs` SHALL include an `Advanced` group whose array position is after the `Guides` group and before the `Reference` group. The group MUST link to all four advanced guide slugs: `guides/advanced/api-route`, `guides/advanced/multi-step-form`, `guides/advanced/react`, and `guides/advanced/vue`.
+The Starlight sidebar in `apps/docs/astro.config.mjs` SHALL include an `Advanced` group whose array position is after the `Patterns` group and before the `Integrations` group. The group MUST link to all five advanced guide slugs: `guides/advanced/api-route`, `guides/advanced/multi-step-form`, `guides/advanced/saga`, `guides/advanced/persist-and-rehydrate`, and `guides/advanced/state-graph-visualizer`.
 
-#### Scenario: Advanced group is positioned between Guides and Reference
+#### Scenario: Advanced group is positioned between Patterns and Integrations
 
 - **WHEN** a developer reads the `sidebar` array in `apps/docs/astro.config.mjs`
-- **THEN** an item with `label: 'Advanced'` appears at an index greater than the `Guides` group and less than the `Reference` group
+- **THEN** an item with `label: 'Advanced'` appears at an index greater than the `Patterns` group and less than the `Integrations` group
 
-#### Scenario: Advanced group links all four guides
+#### Scenario: Advanced group links all five guides
 
 - **WHEN** a visitor views any docs page
-- **THEN** the sidebar `Advanced` section displays links to the API Route, Multi-step Form, React, and Vue guides
+- **THEN** the sidebar `Advanced` section displays links to the API Route, Multi-step Form, Saga, Persist & Rehydrate, and State-graph Visualizer guides
 
 ### Requirement: API Route guide demonstrates a pipeline as an HTTP handler chain
 
@@ -64,29 +67,43 @@ The Starlight sidebar in `apps/docs/astro.config.mjs` SHALL include an `Advanced
 - **THEN** a pipeline (or guard backed by pipeline-validated context) determines whether the transition proceeds
 - **AND** invalid step data results in the transition being blocked and the domain remaining on the current step
 
-### Requirement: React guide binds a domain via `useSyncExternalStore`
+### Requirement: Saga guide demonstrates compensation and retry across a pipeline
 
-`react.mdx` SHALL show a minimal React binding that connects a Plexis domain to component state using `useSyncExternalStore`, driven by `domain.subscribe` and `domain.snapshot`. The guide SHALL focus on the subscribe/snapshot seam rather than React internals.
+`saga.mdx` SHALL present a multi-step workflow where a later step's failure triggers compensating actions for already-completed steps, and SHALL show retrying a transient failure. The guide SHALL model the compensation and retry routing with forks and terminal nodes.
 
-#### Scenario: Binding uses subscribe and snapshot
+#### Scenario: Failure routes to compensating steps
 
-- **WHEN** a reader inspects the React hook in `react.mdx`
-- **THEN** it passes `domain.subscribe` as the subscribe argument and `domain.snapshot` (or a wrapper returning the current snapshot) as the getSnapshot argument to `useSyncExternalStore`
-- **AND** the component re-renders when the domain transitions
+- **WHEN** a reader inspects the pipeline in `saga.mdx`
+- **THEN** a step failure forks to compensating actions that undo prior completed steps
+- **AND** the workflow ends at a terminal node representing the compensated/aborted outcome
 
-### Requirement: Vue guide binds a domain via a ref and subscribe
+#### Scenario: Transient failure is retried
 
-`vue.mdx` SHALL show a minimal Vue binding that connects a Plexis domain to a reactive `ref` updated inside a `domain.subscribe` callback, with the unsubscribe function cleaned up on unmount. The guide SHALL focus on the subscribe/snapshot seam rather than Vue internals.
+- **WHEN** a reader inspects the retry handling in `saga.mdx`
+- **THEN** a transient failure routes back to re-attempt the step before giving up
 
-#### Scenario: Binding uses a ref updated by subscribe
+### Requirement: Persist and rehydrate guide demonstrates the snapshot round-trip across invocations
 
-- **WHEN** a reader inspects the Vue composable in `vue.mdx`
-- **THEN** it initializes a `ref` from `domain.snapshot()` and updates that `ref` inside the `domain.subscribe` callback
-- **AND** it calls the returned unsubscribe function on component unmount
+`persist-and-rehydrate.mdx` SHALL present saving a domain snapshot to an external store and restoring it on a later invocation, framed by the statelessness of serverless/edge runtimes (the domain does not survive in memory between requests). The guide SHALL build on the Patterns snapshots-and-restore mechanics rather than re-teaching them.
+
+#### Scenario: Domain is snapshotted to a store and rehydrated
+
+- **WHEN** a reader inspects `persist-and-rehydrate.mdx`
+- **THEN** it serializes a domain snapshot to an external store and reconstructs the domain from that snapshot on a subsequent request
+- **AND** it frames the motivation as stateless serverless/edge execution
+
+### Requirement: State-graph visualizer guide renders a GraphDescriptor to a diagram
+
+`state-graph-visualizer.mdx` SHALL present reading `domain.graph`/`pipeline.graph` and transforming the `GraphDescriptor` into a rendered diagram format (such as Mermaid or DOT). The guide SHALL build on the Patterns graph-introspection page rather than re-teaching the graph API.
+
+#### Scenario: GraphDescriptor is transformed into a diagram
+
+- **WHEN** a reader inspects `state-graph-visualizer.mdx`
+- **THEN** it reads the graph descriptor and emits a diagram representation (e.g., Mermaid or DOT) of the states/nodes and transitions
 
 ### Requirement: Advanced guides use only long-form code fence languages
 
-Every fenced code block across the four advanced guides SHALL use a long-form language identifier — only `typescript` or `bash` — consistent with the rest of the docs site.
+Every fenced code block across the advanced guides SHALL use a long-form language identifier — only `typescript` or `bash` — consistent with the rest of the docs site.
 
 #### Scenario: No short-alias or other-language fences
 

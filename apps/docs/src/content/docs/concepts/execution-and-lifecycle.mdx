@@ -1,0 +1,88 @@
+---
+title: Execution and Lifecycle
+description: Understand the exact step order when domain.follow() runs and when a pipeline executes, so you know where side effects safely belong.
+---
+
+When code calls `domain.follow()` or `pipeline.run()`, the runtime follows a deterministic, ordered sequence of steps. Knowing this order tells you exactly when your handlers fire, in what context, and where to place side effects that depend on prior steps having completed.
+
+## Domain: the `follow()` order
+
+Every call to `domain.follow(event, payload)` runs these steps in sequence:
+
+1. **Guard check** — if the flow has a `guard` function, it is evaluated first. If it returns `false`, the follow is blocked immediately; no context changes, no side effects.
+2. **`exit`** — the current state's `exit` hook runs. The patch it returns is merged into context.
+3. **Flow action** — the flow's `action` (registered via `on(event, { action })`) runs. Its patch is merged into context.
+4. **Flow pipeline** — if the flow has a `pipeline`, it runs now against the updated context. Its final context becomes the new context.
+5. **State transitions** — the domain moves to the target state.
+6. **`enter`** — the new state's `enter` hook runs. Its patch is merged into context.
+7. **State entry pipeline** — if the new state has a `pipeline`, it runs against the updated context.
+8. **History and subscribers** — the transition is recorded in history, and all `subscribe` listeners are called with the new snapshot.
+
+```typescript
+import { defineDomain, when, enter, exit, on } from '@tde.io/plexis';
+
+const workflow = defineDomain('workflow', () => {
+  when('draft', () => {
+    exit(async (ctx) => {
+      // Step 2 — runs when leaving 'draft'
+      return { leftAt: 'draft' };
+    });
+    on('submit', () => {
+      action(async (ctx) => {
+        // Step 3 — ctx now has leftAt from exit
+        return { submittedBy: 'user_1' };
+      });
+      return target('review');
+    });
+  });
+
+  when('review', () => {
+    enter(async (ctx) => {
+      // Step 6 — ctx now has leftAt and submittedBy
+      return { enteredReviewAt: Date.now() };
+    });
+  });
+
+  return { context: {}, initial: 'draft' };
+});
+```
+
+**Where side effects belong:** use `enter`/`exit` for state-scoped side effects (logging, metrics) and flow actions for transition-scoped ones (validation, API calls triggered by a specific event). Subscribers (step 8) are ideal for reacting to the completed transition from outside the domain.
+
+## Pipeline: the run loop
+
+Every call to `pipeline.run(context, input?)` follows this loop:
+
+1. **Start at `initial`** — execution begins at the node named in the setup return value.
+2. **Run node action** — the node's `action` runs. Its patch is merged into context.
+3. **Evaluate forks** — forks are checked in declaration order. The **first fork whose `condition` returns `true`** wins.
+4. **Follow fork target** — execution moves to the fork target (a node ID string or a sub-Pipeline).
+5. **Repeat** — steps 2–4 repeat until a terminal node or no matching fork.
+6. **Return `PipelineRunResult`** — status is `'completed'` if a terminal was reached, `'stopped'` if no fork matched.
+
+```typescript
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
+
+const process = definePipeline('process', () => {
+  node('validate', () => {
+    action(async (ctx) => ({ validated: true }));
+    fork('valid', target('charge'), (ctx) => ctx.validated && ctx.amount > 0);
+    fork('invalid', target('reject'), (ctx) => !ctx.validated || ctx.amount <= 0);
+  });
+  node('charge', terminal());
+  node('reject', terminal());
+
+  return { initial: 'validate' };
+});
+
+const result = await process.run({ validated: false, amount: 50 });
+// Forks are evaluated after the action merges { validated: true }
+// ctx.validated is now true, ctx.amount > 0, so 'charge' wins
+// result.finalNode === 'charge'
+```
+
+**Forks evaluate after the action** — the action runs first and its patch is merged before any fork condition is checked. This means fork conditions always see the result of the node's action.
+
+**No matching fork stops the run** — if all fork conditions return `false`, the pipeline stops at the current node with `status: 'stopped'`. This is not an error; it is a valid terminal-like outcome.
+
+For full method signatures, see the [Domain reference](/reference/domain) and [Pipeline reference](/reference/pipeline).

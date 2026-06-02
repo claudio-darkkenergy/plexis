@@ -3,17 +3,18 @@ import { describe, it, expect } from 'vitest';
 import { buildDomainDescriptor, buildPipelineDescriptor } from '../src/graph/descriptor.js';
 import { inbound, outbound, reachableFrom, pathsTo, pathsFrom } from '../src/graph/paths.js';
 import { inspectNode } from '../src/graph/inspection.js';
+import type { Pipeline } from '../src/types.js';
 
 // ─── Domain descriptor ──────────────────────────────────────────────────────
 
 describe('buildDomainDescriptor', () => {
   it('produces nodes for each state', () => {
-    const states = {
-      pending: { edges: { SUBMIT: { target: 'processing' } } },
-      processing: { edges: { DONE: { target: 'done' } } },
-      done: { terminal: true, edges: {} },
+    const whens = {
+      pending: { on: { SUBMIT: { target: 'processing' } } },
+      processing: { on: { DONE: { target: 'done' } } },
+      done: { terminal: true, on: {} },
     };
-    const desc = buildDomainDescriptor('order', states, 'pending');
+    const desc = buildDomainDescriptor('order', whens, 'pending');
     expect(desc.id).toBe('order');
     expect(desc.kind).toBe('domain');
     expect(desc.nodes).toHaveLength(3);
@@ -21,25 +22,58 @@ describe('buildDomainDescriptor', () => {
   });
 
   it('marks entry and terminal nodes correctly', () => {
-    const states = {
-      pending: { edges: { GO: { target: 'done' } } },
-      done: { terminal: true, edges: {} },
+    const whens = {
+      pending: { on: { GO: { target: 'done' } } },
+      done: { terminal: true, on: {} },
     };
-    const desc = buildDomainDescriptor('d', states, 'pending');
+    const desc = buildDomainDescriptor('d', whens, 'pending');
     expect(desc.entryNodes[0].nodeId).toBe('pending');
     expect(desc.terminalNodes[0].nodeId).toBe('done');
   });
 
-  it('records edge-pipeline attachment', () => {
-    const fakePipeline = { id: 'pay', run: () => {}, describe: () => ({}) };
-    const states = {
-      pending: { edges: { PAY: { target: 'done', pipeline: fakePipeline } } },
-      done: { terminal: true, edges: {} },
+  it('domain flow edges have kind domain-flow', () => {
+    const whens = {
+      pending: { on: { SUBMIT: { target: 'processing' } } },
+      processing: { terminal: true, on: {} },
     };
-    const desc = buildDomainDescriptor('d', states, 'pending');
+    const desc = buildDomainDescriptor('d', whens, 'pending');
+    expect(desc.edges[0].kind).toBe('domain-flow');
+  });
+
+  it('edge-action and edge-pipeline kind literals remain unchanged', () => {
+    const fakePipeline = { id: 'pay', run: () => {}, describe: () => ({}) } as unknown as Pipeline<Record<string, unknown>>;
+    const whens = {
+      pending: { on: { PAY: { target: 'done', pipeline: fakePipeline } } },
+      done: { terminal: true, on: {} },
+    };
+    const desc = buildDomainDescriptor('d', whens, 'pending');
+    expect(desc.attachments[0].kind).toBe('edge-pipeline');
+  });
+
+  it('records edge-pipeline attachment', () => {
+    const fakePipeline = { id: 'pay', run: () => {}, describe: () => ({}) } as unknown as Pipeline<Record<string, unknown>>;
+    const whens = {
+      pending: { on: { PAY: { target: 'done', pipeline: fakePipeline } } },
+      done: { terminal: true, on: {} },
+    };
+    const desc = buildDomainDescriptor('d', whens, 'pending');
     expect(desc.attachments).toHaveLength(1);
     expect(desc.attachments[0].kind).toBe('edge-pipeline');
     expect(desc.attachments[0].pipeline.pipelineId).toBe('pay');
+  });
+
+  it('domain-edge kind literal does not appear — replaced by domain-flow', () => {
+    const whens = {
+      pending: { on: { SUBMIT: { target: 'done' } } },
+      done: { terminal: true, on: {} },
+    };
+    const desc = buildDomainDescriptor('d', whens, 'pending');
+    for (const edge of desc.edges) {
+      expect(edge.kind).not.toBe('domain-edge');
+    }
+    for (const node of desc.nodes) {
+      expect(node.ref.kind).not.toBe('domain-edge');
+    }
   });
 });
 

@@ -1,0 +1,130 @@
+---
+title: Saga — Compensation and Retry
+description: Model multi-step workflows with compensation for already-completed steps on failure and retry of transient errors, routed through pipeline forks and terminal nodes.
+---
+
+A saga is a sequence of steps where a later failure means the earlier completed steps need to be undone. Rather than using exceptions that unwind a call stack, a Plexis pipeline models the compensation explicitly: a failure routes to compensating nodes, which undo prior work and lead to a "compensated" terminal. Transient failures are retried by routing back to the same node before giving up.
+
+## The scenario: a three-step order fulfillment
+
+This saga reserves inventory, charges the card, and ships the order. If charging fails, it releases the inventory. If shipping fails, it both refunds the charge and releases the inventory. Each step has an explicit compensation route.
+
+```typescript
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
+
+type FulfillCtx = {
+  orderId: string;
+  inventoryReserved: boolean;
+  chargeId: string | null;
+  shipped: boolean;
+  // retry counter for the shipping step
+  shipAttempts: number;
+  error: string | null;
+};
+
+const fulfillOrder = definePipeline<FulfillCtx>('fulfill-order', () => {
+
+  // ── Step 1: Reserve inventory ───────────────────────────────────────────────
+  node('reserve-inventory', () => {
+    action(async (ctx) => ({ inventoryReserved: true }));
+    fork('reserved', target('charge-card'), (ctx) => ctx.inventoryReserved);
+    fork('no-stock', target('saga-failed-no-stock'));
+  });
+
+  // ── Step 2: Charge the card ─────────────────────────────────────────────────
+  node('charge-card', () => {
+    action(async (ctx) => ({ chargeId: 'ch_001' }));
+    fork('charged', target('ship-order'), (ctx) => !!ctx.chargeId);
+    fork('charge-failed', target('compensate-release-inventory'));
+  });
+
+  // ── Step 3: Ship the order ──────────────────────────────────────────────────
+  node('ship-order', () => {
+    action(async (ctx) => ({
+      shipAttempts: ctx.shipAttempts + 1,
+      shipped: ctx.shipAttempts >= 2,
+    }));
+    fork('shipped', target('saga-complete'), (ctx) => ctx.shipped);
+    fork('retry', target('ship-order'), (ctx) => ctx.shipAttempts < 3);
+    fork('shipping-failed', target('compensate-refund-and-release'));
+  });
+
+  // ── Compensation: release inventory (charge never happened) ─────────────────
+  node('compensate-release-inventory', () => {
+    action(async (ctx) => ({ inventoryReserved: false }));
+    fork('next', target('saga-compensated'));
+  });
+
+  // ── Compensation: refund + release (charge succeeded, shipping failed) ───────
+  node('compensate-refund-and-release', () => {
+    action(async (ctx) => ({ chargeId: null, inventoryReserved: false }));
+    fork('next', target('saga-compensated'));
+  });
+
+  // ── Terminals ───────────────────────────────────────────────────────────────
+  node('saga-complete', terminal());
+  node('saga-compensated', terminal());
+  node('saga-failed-no-stock', terminal());
+
+  return { initial: 'reserve-inventory' };
+});
+```
+
+## Running the saga
+
+```typescript
+const result = await fulfillOrder.run({
+  orderId: 'ord_1',
+  inventoryReserved: false,
+  chargeId: null,
+  shipped: false,
+  shipAttempts: 0,
+  error: null,
+});
+
+if (result.finalNode === 'saga-complete') {
+  console.log('Order fulfilled:', result.context.orderId);
+} else if (result.finalNode === 'saga-compensated') {
+  console.log('Saga compensated. Error:', result.context.error);
+} else {
+  console.log('No stock available');
+}
+```
+
+Because `ship-order` forks back to itself on retry, the pipeline traverses `ship-order → ship-order → ship-order → saga-complete` on the default simulated failure path. Each traversal is a separate node action execution with merged context — `shipAttempts` increments until the condition `shipAttempts >= 2` is met.
+
+## Key patterns used
+
+**Compensation routing** — each step's failure fork leads to a compensating node that undoes what was done, then continues to a terminal. Compensation is part of the graph, not hidden in exception handlers.
+
+**Retry via self-fork** — a fork condition `ctx.shipAttempts < 3` routes back to the same node. The action increments the counter each time, giving the node a finite number of attempts before the no-retry fork wins.
+
+**Terminal naming** — the three terminals (`saga-complete`, `saga-compensated`, `saga-failed-no-stock`) make the outcome explicit in `result.finalNode`. No need to inspect context to know what happened.
+
+## Attaching the saga to a domain edge
+
+Use the fulfillment saga as the pipeline on an order domain edge to keep your domain state machine clean:
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+type OrderCtx = FulfillCtx;
+
+const order = defineDomain<OrderCtx>('order', () => {
+  when('pending', () => {});
+  when('fulfilled', terminal());
+  return {
+    context: {
+      orderId: 'ord_1',
+      inventoryReserved: false,
+      chargeId: null,
+      shipped: false,
+      shipAttempts: 0,
+      error: null,
+    },
+    initial: 'pending',
+  };
+});
+```
+
+For pipeline composition and fork patterns, see [Composing Pipelines](/patterns/composing-pipelines) and [Forks in Depth](/patterns/forks-in-depth) in Patterns.

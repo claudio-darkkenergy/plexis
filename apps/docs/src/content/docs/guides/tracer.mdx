@@ -1,7 +1,9 @@
 ---
 title: Tracer
-description: Observe domain and pipeline execution with createTracer() and TraceLevel.
+description: Common use cases for the tracer — attaching to domains and pipelines, subscribing to events, querying history, and exporting traces.
 ---
+
+This guide covers the most common tracing patterns: attaching a tracer, subscribing to live events, querying recorded history, and exporting in different formats. For complete signatures, see the [Tracer reference](/reference/tracer/) and [TraceEvent reference](/reference/types#traceevent).
 
 Plexis includes a built-in tracing system for observing execution flow, debugging state machine logic, and capturing structured execution history.
 
@@ -16,16 +18,7 @@ const tracer = createTracer({
 });
 ```
 
-`TracerOptions`:
-
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `enabled` | `boolean` | `true` | Enable or disable recording |
-| `captureContext` | `boolean`, `'before'`, `'after'`, or `'both'` | `false` | Snapshot context in each trace event |
-| `maxEvents` | `number` | unlimited | Maximum events to retain in memory |
-| `clock` | `() => number` | `Date.now` | Custom timestamp source |
-| `idFactory` | `() => string` | `crypto.randomUUID` | Custom ID generator |
-| `onSubscriberError` | function | rethrow | Handler for subscriber errors |
+See [TracerOptions](/reference/tracer#createtraceroptions) for all available options.
 
 ## Attaching a Tracer to a Domain or Pipeline
 
@@ -34,15 +27,17 @@ Pass the tracer in the options object when defining a domain or pipeline:
 ```typescript
 import {
   defineDomain, definePipeline,
-  state, edge, node, terminal,
+  when, edge, node, terminal,
   createTracer,
 } from '@tde.io/plexis';
 
 const tracer = createTracer();
 
 const order = defineDomain('order', () => {
-  state('pending', { edges: { SUBMIT: edge({ target: 'processing' }) } });
-  state('processing', { terminal: true });
+  when('pending', () => {
+    on('submit', target('processing'));
+  });
+  when('processing', terminal());
   return { context: {}, initial: 'pending' } as const;
 }, { tracer });
 
@@ -79,7 +74,7 @@ const unsub = tracer.subscribe((event) => {
   console.log(`[${event.level}] ${event.type} — ${event.status}`);
 });
 
-await order.follow('SUBMIT');
+await order.follow('submit');
 
 unsub(); // stop listening
 ```
@@ -112,18 +107,7 @@ const tree = tracer.export('tree');
 
 ## TraceEvent Fields
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `id` | string | Unique event ID |
-| `traceId` | string | Groups all events from one `follow()` or `run()` call |
-| `parentId` | string | Parent event ID for nested calls (optional) |
-| `timestamp` | number | Time the event was recorded |
-| `level` | `TraceLevel` | Which subsystem emitted this event |
-| `type` | string | Specific event type, e.g. `'follow:start'` |
-| `domainId` | string | Emitting domain (optional) |
-| `pipelineId` | string | Emitting pipeline (optional) |
-| `status` | string | `'started'`, `'completed'`, `'blocked'`, `'selected'`, `'skipped'`, or `'failed'` |
-| `contextSnapshot` | any | Context captured when `captureContext` is enabled |
+See [TraceEvent](/reference/types#traceevent) for the complete field reference.
 
 ## Clearing History
 

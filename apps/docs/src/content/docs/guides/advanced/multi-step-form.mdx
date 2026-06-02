@@ -10,7 +10,7 @@ A domain owns which step is currently active. Each forward edge passes the submi
 Each step gets its own pipeline that inspects the submitted form data and sets an `error` field in context if anything is invalid.
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type CheckoutCtx = {
   shipping?: { address: string; city: string; zip: string };
@@ -19,18 +19,16 @@ type CheckoutCtx = {
 };
 
 const validateShipping = definePipeline<CheckoutCtx>('validate-shipping', () => {
-  node('check', {
-    action: async (ctx) => {
+  node('check', () => {
+    action(async (ctx) => {
       const s = ctx.shipping;
       if (!s?.address || !s?.city || !s?.zip) {
-        return { error: 'Shipping address is incomplete' };
+        return { error: 'Shipping address required' };
       }
       return { error: undefined };
-    },
-    forks: [
-      fork((ctx) => Boolean(ctx.error), 'fail', { label: 'invalid' }),
-      fork(() => true,                  'pass', { label: 'valid' }),
-    ],
+    });
+    fork('fail', target('fail'), (ctx) => !!ctx.error);
+    fork('pass', target('pass'));
   });
   node('fail', terminal());
   node('pass', terminal());
@@ -38,18 +36,16 @@ const validateShipping = definePipeline<CheckoutCtx>('validate-shipping', () => 
 });
 
 const validatePayment = definePipeline<CheckoutCtx>('validate-payment', () => {
-  node('check', {
-    action: async (ctx) => {
+  node('check', () => {
+    action(async (ctx) => {
       const p = ctx.payment;
       if (!p?.card || !p?.expiry) {
-        return { error: 'Payment details are incomplete' };
+        return { error: 'Payment details required' };
       }
       return { error: undefined };
-    },
-    forks: [
-      fork((ctx) => Boolean(ctx.error), 'fail', { label: 'invalid' }),
-      fork(() => true,                  'pass', { label: 'valid' }),
-    ],
+    });
+    fork('fail', target('fail'), (ctx) => !!ctx.error);
+    fork('pass', target('pass'));
   });
   node('fail', terminal());
   node('pass', terminal());
@@ -62,52 +58,21 @@ const validatePayment = definePipeline<CheckoutCtx>('validate-payment', () => {
 States map directly to form steps. The `guard` on each forward edge merges the submitted payload into a draft context and runs the step's validation pipeline. When the pipeline reports an error the guard returns `false`, the transition is blocked, and the domain stays on the current step.
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 const checkout = defineDomain<CheckoutCtx>('checkout', () => {
-  state('shipping', {
-    edges: {
-      NEXT: edge({
-        target: 'payment',
-        guard: async (ctx, input) => {
-          const draft = { ...ctx, shipping: input.payload as CheckoutCtx['shipping'] };
-          const result = await validateShipping.run(draft);
-          return result.status === 'completed' && !result.context.error;
-        },
-        action: async (ctx, input) => ({
-          shipping: input.payload as CheckoutCtx['shipping'],
-          error: undefined,
-        }),
-      }),
-    },
+  when('shipping', () => {});
+
+  when('payment', () => {
+    on('back', target('shipping'));
   });
 
-  state('payment', {
-    edges: {
-      NEXT: edge({
-        target: 'review',
-        guard: async (ctx, input) => {
-          const draft = { ...ctx, payment: input.payload as CheckoutCtx['payment'] };
-          const result = await validatePayment.run(draft);
-          return result.status === 'completed' && !result.context.error;
-        },
-        action: async (ctx, input) => ({
-          payment: input.payload as CheckoutCtx['payment'],
-          error: undefined,
-        }),
-      }),
-      BACK: edge({ target: 'shipping' }),
-    },
+  when('review', () => {
+    on('confirm', target('confirmed'));
+    on('back', target('payment'));
   });
 
-  state('review', {
-    edges: {
-      CONFIRM: edge({ target: 'confirmed' }),
-      BACK:    edge({ target: 'payment' }),
-    },
-  });
-
-  state('confirmed', { terminal: true });
+  when('confirmed', terminal());
 
   return { context: {}, initial: 'shipping' };
 });
@@ -117,12 +82,12 @@ const checkout = defineDomain<CheckoutCtx>('checkout', () => {
 
 ```typescript
 // Try to advance without submitting data — guard rejects
-const blocked = await checkout.follow('NEXT');
+const blocked = await checkout.follow('next');
 console.log(blocked.status); // 'blocked' — domain stays on 'shipping'
 console.log(checkout.state); // 'shipping'
 
 // Submit valid shipping data
-const step1 = await checkout.follow('NEXT', {
+const step1 = await checkout.follow('next', {
   address: '1 Main St',
   city: 'Springfield',
   zip: '12345',
@@ -131,11 +96,11 @@ console.log(step1.status); // 'followed'
 console.log(checkout.state); // 'payment'
 
 // Try to advance without payment data
-const blocked2 = await checkout.follow('NEXT');
+const blocked2 = await checkout.follow('next');
 console.log(blocked2.status); // 'blocked' — domain stays on 'payment'
 
 // Submit valid payment data
-const step2 = await checkout.follow('NEXT', {
+const step2 = await checkout.follow('next', {
   card: '4111111111111111',
   expiry: '12/28',
 });
@@ -143,7 +108,7 @@ console.log(step2.status); // 'followed'
 console.log(checkout.state); // 'review'
 
 // Confirm the order
-const step3 = await checkout.follow('CONFIRM');
+const step3 = await checkout.follow('confirm');
 console.log(step3.status); // 'followed'
 console.log(checkout.state); // 'confirmed'
 ```

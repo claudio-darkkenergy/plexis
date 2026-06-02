@@ -1,11 +1,11 @@
 import type {
   GraphDescriptor, GraphNode, GraphEdge, GraphNodeRef,
-  GraphAttachment, StateNodeDef, EdgeDef, PipelineNodeDef, PipelineForkDef,
+  GraphAttachment, WhenDef, OnDef, PipelineNodeDef, PipelineForkDef,
 } from '../types.js';
 
 export function buildDomainDescriptor(
   domainId: string,
-  states: Record<string, StateNodeDef<any>>,
+  whens: Record<string, WhenDef<any>>,
   initial: string
 ): GraphDescriptor {
   const nodes: GraphNode[] = [];
@@ -14,45 +14,45 @@ export function buildDomainDescriptor(
   const terminalNodes: GraphNodeRef[] = [];
   const attachments: GraphAttachment[] = [];
 
-  for (const [stateId, stateDef] of Object.entries(states)) {
+  for (const [stateId, whenDef] of Object.entries(whens)) {
     const ref: GraphNodeRef = { kind: 'domain-state', domainId, nodeId: stateId };
     nodes.push({
       ref,
       id: stateId,
-      terminal: stateDef.terminal ?? false,
+      terminal: whenDef.terminal ?? false,
       entry: stateId === initial,
-      metadata: stateDef.metadata,
+      metadata: whenDef.metadata,
     });
     if (stateId === initial) entryNodes.push(ref);
-    if (stateDef.terminal) terminalNodes.push(ref);
+    if (whenDef.terminal) terminalNodes.push(ref);
 
-    if (stateDef.pipeline) {
+    if (whenDef.pipeline) {
       attachments.push({
         kind: 'state-entry-pipeline',
         owner: ref,
-        pipeline: { kind: 'pipeline', pipelineId: stateDef.pipeline.id },
+        pipeline: { kind: 'pipeline', pipelineId: whenDef.pipeline.id },
       });
     }
 
-    for (const [event, edgeDef] of Object.entries((stateDef.edges ?? {}) as Record<string, EdgeDef<any>>)) {
+    for (const [event, onDef] of Object.entries((whenDef.on ?? {}) as Record<string, OnDef<any>>)) {
       const edgeId = `${stateId}:${event}`;
-      const edgeRef: GraphNodeRef = { kind: 'domain-edge', domainId, edgeId };
+      const flowRef: GraphNodeRef = { kind: 'domain-flow', domainId, edgeId };
       edges.push({
         id: edgeId,
         from: ref,
-        to: { kind: 'domain-state', domainId, nodeId: edgeDef.target },
-        kind: 'domain-edge',
+        to: { kind: 'domain-state', domainId, nodeId: onDef.target },
+        kind: 'domain-flow',
         event,
-        label: (edgeDef.metadata as Record<string, string> | undefined)?.label,
-        guard: edgeDef.guard ? 'guard' : undefined,
-        metadata: edgeDef.metadata,
+        label: (onDef.metadata as Record<string, string> | undefined)?.label,
+        guard: onDef.guard ? 'guard' : undefined,
+        metadata: onDef.metadata,
       });
 
-      if (edgeDef.pipeline) {
+      if (onDef.pipeline) {
         attachments.push({
           kind: 'edge-pipeline',
-          owner: edgeRef,
-          pipeline: { kind: 'pipeline', pipelineId: edgeDef.pipeline.id },
+          owner: flowRef,
+          pipeline: { kind: 'pipeline', pipelineId: onDef.pipeline.id },
         });
       }
     }

@@ -1,0 +1,166 @@
+---
+title: Definition Functions
+description: Reference for defineDomain, definePipeline, and MergeMetadata.
+---
+
+These functions create `Domain` and `Pipeline` instances from a synchronous setup function.
+
+## `defineDomain(id, setup, options?)`
+
+Creates and returns a `Domain` instance. The setup function runs synchronously; `when()` and `on()` registrations are collected and used to build the domain.
+
+```typescript
+function defineDomain<TContext, TEdges>(
+  id: string,
+  setup: () => DomainSetupResult<TContext>,
+  options?: DefineDomainOptions<TContext>
+): Domain<TContext, TEdges>
+```
+
+### Parameters
+
+**`id`** `string`
+
+Unique domain identifier.
+
+**`setup`** `() => DomainSetupResult<TContext>`
+
+Synchronous setup function. `when()` calls inside register states. Must return a `DomainSetupResult`:
+
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `context` | `TContext` | Yes | — | Initial context object |
+| `initial` | `string` | Yes | — | ID of the initial state |
+| `strict` | `boolean` | No | `false` | When `true`, `follow()` throws on unknown events instead of returning `status: 'ignored'` |
+| `errorPolicy` | `ErrorPolicy` | No | — | Default error policy for handlers in this domain |
+
+**`options`** `DefineDomainOptions<TContext>` *(optional)*
+
+Additional configuration:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `tracer` | `Tracer` | No | Tracer instance to attach |
+| `merge` | `(prev: TContext, patch: Partial<TContext>, metadata: MergeMetadata) => TContext` | No | Custom context merge function; called instead of the default shallow spread |
+
+### Return value
+
+`Domain<TContext, TEdges>`
+
+### Example
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+type OrderContext = { orderId: string | null; total: number };
+
+const order = defineDomain<OrderContext>('order', () => {
+  when('pending', () => {
+    on('submit', target('processing'));
+  });
+  when('processing', () => {
+    on('fulfill', target('fulfilled'));
+  });
+  when('fulfilled', terminal());
+
+  return { context: { orderId: null, total: 0 }, initial: 'pending' };
+});
+```
+
+---
+
+## `definePipeline(id, setup, options?)`
+
+Creates and returns a `Pipeline` instance. The setup function runs synchronously; `node()` registrations are collected.
+
+```typescript
+function definePipeline<TContext>(
+  id: string,
+  setup: () => PipelineSetupResult,
+  options?: DefinePipelineOptions<TContext>
+): Pipeline<TContext>
+```
+
+### Parameters
+
+**`id`** `string`
+
+Unique pipeline identifier.
+
+**`setup`** `() => PipelineSetupResult`
+
+Synchronous setup function. `node()` calls inside register nodes. Must return a `PipelineSetupResult`:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `initial` | `string` | Yes | ID of the first node to execute |
+
+**`options`** `DefinePipelineOptions<TContext>` *(optional)*
+
+Additional configuration:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `tracer` | `Tracer` | No | Tracer instance to attach |
+| `errorPolicy` | `ErrorPolicy` | No | Default error policy for node actions |
+| `merge` | `(prev: TContext, patch: Partial<TContext>, metadata: MergeMetadata) => TContext` | No | Custom context merge function; called instead of the default shallow spread |
+
+### Return value
+
+`Pipeline<TContext>`
+
+### Example
+
+```typescript
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
+
+type PaymentContext = { cardValid: boolean; charged: boolean };
+
+const payment = definePipeline<PaymentContext>('payment', () => {
+  node('validate', () => {
+    action(async (ctx) => ({ cardValid: ctx.cardValid }));
+    fork('charge', target('charge'), (ctx) => ctx.cardValid);
+    fork('decline', target('decline'), (ctx) => !ctx.cardValid);
+  });
+  node('charge', terminal(async () => ({ charged: true })));
+  node('decline', terminal());
+  return { initial: 'validate' };
+});
+```
+
+---
+
+## `MergeMetadata`
+
+Passed as the third argument to a custom `merge` function. Describes the execution context in which a context patch is being applied.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `phase` | `string` | Yes | Execution phase (e.g. `'flow-action'`, `'pipeline-action'`, `'enter'`) |
+| `domainId` | `string` | No | ID of the enclosing domain, when in a domain context |
+| `pipelineId` | `string` | No | ID of the enclosing pipeline, when in a pipeline context |
+| `nodeId` | `string` | No | ID of the current pipeline node |
+| `stateId` | `string` | No | ID of the current domain state |
+| `event` | `string` | No | Event name that triggered the transition |
+
+### Example
+
+```typescript
+import { defineDomain } from '@tde.io/plexis';
+import type { MergeMetadata } from '@tde.io/plexis';
+
+type Ctx = { count: number; lastPhase: string };
+
+const domain = defineDomain<Ctx>(
+  'counter',
+  () => {
+    // ... states ...
+    return { context: { count: 0, lastPhase: '' }, initial: 'idle' };
+  },
+  {
+    merge(prev, patch, meta: MergeMetadata) {
+      return { ...prev, ...patch, lastPhase: meta.phase };
+    },
+  }
+);
+```

@@ -1,0 +1,88 @@
+---
+title: Context and Patches
+description: Learn how Plexis keeps context immutable — handlers return patches that shallow-merge over prior state, and returning nothing leaves context unchanged.
+---
+
+Plexis never mutates context. Every handler that can modify state does so by returning a *patch* — a partial object that the runtime merges over the previous context. Understanding this model makes every `action`, `enter`, `exit`, and node action predictable.
+
+## What context is
+
+Context is a plain object you provide when defining a domain or calling `pipeline.run()`. The runtime holds one canonical copy at any moment. Between transitions, that copy is stable and safe to read.
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+type OrderCtx = { orderId: string; total: number; paid: boolean };
+
+const order = defineDomain<OrderCtx>('order', () => {
+  when('pending', () => {
+    on('pay', () => {
+      action(async (ctx) => ({ paid: true }));
+      return target('paid');
+    });
+  });
+  when('paid', terminal());
+
+  return {
+    context: { orderId: 'ord_1', total: 99, paid: false },
+    initial: 'pending',
+  };
+});
+
+console.log(order.context.paid);  // false
+
+await order.follow('pay');
+
+console.log(order.context.paid);  // true
+console.log(order.context.total); // 99 — unchanged keys are preserved
+```
+
+## Patches are shallow-merged
+
+The runtime applies the patch with `{ ...previous, ...patch }`. This means:
+
+- Keys in the patch **overwrite** the same keys in previous context.
+- Keys **not present in the patch** survive unchanged.
+- **Returning `undefined`, `null`, or nothing** is equivalent to returning `{}` — no change.
+
+```typescript
+// Only the paid field changes; orderId and total survive
+action: async (ctx) => ({ paid: true })
+
+// Returning nothing — context unchanged
+enter: async (ctx) => {}
+
+// Replacing a key with undefined removes it from TypeScript's view
+// but that is unusual; prefer explicit false/null for optional flags
+action: async (ctx) => ({ discount: undefined })
+```
+
+## Context is not mutated in place
+
+Handlers receive context as a read-only snapshot. Mutating `ctx` directly has no effect — the runtime does not watch the object; it reads the return value.
+
+```typescript
+// This does nothing — the mutation is invisible to the runtime
+action: async (ctx) => {
+  (ctx as any).paid = true; // has no effect
+  // return value is undefined → no change
+}
+
+// This is correct
+action: async (ctx) => ({ paid: true })
+```
+
+## Async handlers
+
+Handlers can be `async`. The runtime uses `await` throughout, so returning a `Promise<Partial<TContext>>` works exactly like returning the value directly.
+
+```typescript
+action: async (ctx, input) => {
+  const result = await externalService.verify(ctx.orderId);
+  return { verified: result.ok };
+}
+```
+
+## Overriding the default merge
+
+The default shallow merge is right for most use cases. When you need nested merging, array appends, or key deletion, supply a custom `merge` in the definition options. See [Custom Merge](/patterns/custom-merge) in Patterns.

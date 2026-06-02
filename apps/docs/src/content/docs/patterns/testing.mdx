@@ -1,0 +1,157 @@
+---
+title: Testing Domains and Pipelines
+description: Write deterministic tests using followFrom to start from any state, assert on recorded history, and exercise fork branches in isolation.
+---
+
+Plexis domains and pipelines are plain async objects with no hidden global state — they are easy to test. The key testing seams are: `followFrom()` to start a domain from any state without running through every prior transition, `history()` to assert on the recorded transition trail, and `pipeline.run()` called with context constructed to route through the fork you want to test.
+
+## Testing a domain transition
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+import { expect, test } from 'vitest';
+
+const order = defineDomain('order', () => {
+  when('pending', () => {
+    on('submit', target('processing'));
+  });
+  when('processing', () => {
+    on('fulfill', target('fulfilled'));
+  });
+  when('fulfilled', terminal());
+  return { context: { orderId: 'ord_1' }, initial: 'pending' };
+});
+
+test('submit transitions pending → processing', async () => {
+  const result = await order.follow('submit');
+
+  expect(result.status).toBe('followed');
+  expect(result.from).toBe('pending');
+  expect(result.to).toBe('processing');
+  expect(order.state).toBe('processing');
+});
+```
+
+## Using `followFrom()` to start at an arbitrary state
+
+Real domain paths often require several transitions to reach the state you want to test. `followFrom()` teleports the domain to any registered state before following the event — without running `exit`, `enter`, or any pipeline for the intermediate states.
+
+```typescript
+test('fulfill transitions processing → fulfilled', async () => {
+  // Start at 'processing' without going through submit
+  const result = await order.followFrom('processing', 'fulfill');
+
+  expect(result.status).toBe('followed');
+  expect(result.to).toBe('fulfilled');
+  expect(order.state).toBe('fulfilled');
+});
+```
+
+`followFrom()` also resets the domain's starting context to the current context, so tests are isolated from prior transitions on the same instance. Create a fresh domain per test suite if you need fully independent state.
+
+## Asserting on `history()`
+
+`domain.history()` returns every completed transition as a `DomainHistoryEntry` — `{ from, to, event, payload, context, timestamp, traceId }`.
+
+```typescript
+test('history records both transitions', async () => {
+  await order.follow('submit');
+  await order.follow('fulfill');
+
+  const history = order.history();
+
+  expect(history).toHaveLength(2);
+  expect(history[0].event).toBe('submit');
+  expect(history[0].from).toBe('pending');
+  expect(history[1].event).toBe('fulfill');
+  expect(history[1].to).toBe('fulfilled');
+});
+```
+
+## Testing that a guard blocks a transition
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+const account = defineDomain('account', () => {
+  when('open', () => {
+    on('withdraw', () => {
+      guard(async (ctx) => ctx.balance >= ctx.amount);
+      action(async (ctx) => ({ balance: ctx.balance - ctx.amount }));
+      return target('open');
+    });
+  });
+  return { context: { balance: 50, amount: 100 }, initial: 'open' };
+});
+
+test('withdraw is blocked when balance is insufficient', async () => {
+  const result = await account.follow('withdraw');
+
+  expect(result.status).toBe('blocked');
+  expect(account.context.balance).toBe(50); // unchanged
+});
+```
+
+## Testing a specific pipeline fork
+
+Construct context to satisfy exactly the condition you want to exercise, then call `pipeline.run()`:
+
+```typescript
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
+import { expect, test } from 'vitest';
+
+type Ctx = { cardValid: boolean; charged: boolean };
+
+const charge = definePipeline<Ctx>('charge', () => {
+  node('check-card', () => {
+    fork('charge', target('charge'), (ctx) => ctx.cardValid);
+    fork('decline', target('decline'), (ctx) => !ctx.cardValid);
+  });
+  node('charge', terminal());
+  node('decline', terminal());
+  return { initial: 'check-card' };
+});
+
+test('valid card routes to charge', async () => {
+  const result = await charge.run({ cardValid: true, charged: false });
+
+  expect(result.status).toBe('completed');
+  expect(result.finalNode).toBe('charge');
+});
+
+test('invalid card routes to decline', async () => {
+  const result = await charge.run({ cardValid: false, charged: false });
+
+  expect(result.status).toBe('completed');
+  expect(result.finalNode).toBe('decline');
+});
+```
+
+## Creating a fresh domain per test
+
+A single domain instance accumulates state and history across calls. For isolated tests, create a new instance per test or use a factory:
+
+```typescript
+function makeOrder() {
+  return defineDomain('order', () => {
+    when('pending', () => {
+      on('submit', target('processing'));
+    });
+    when('processing', terminal());
+    return { context: {}, initial: 'pending' };
+  });
+}
+
+test('starts in pending', () => {
+  const order = makeOrder();
+  expect(order.state).toBe('pending');
+});
+
+test('submit transitions to processing', async () => {
+  const order = makeOrder();
+  await order.follow('submit');
+  expect(order.state).toBe('processing');
+});
+```
+
+For `followFrom()` and `history()` signatures, see the [Domain Instance reference](/reference/domain).

@@ -1,0 +1,102 @@
+---
+title: Designing the State Graph
+description: Practical guidance on choosing an initial state, declaring terminals, avoiding unreachable states, and understanding what strict mode rejects.
+---
+
+A domain's state graph is declared in the setup function. Getting the structure right — especially `initial`, terminal states, and reachability — determines whether the machine models your business domain cleanly and whether strict mode stays silent.
+
+## Choosing `initial`
+
+The `initial` field in the setup return value names the state the domain starts in when first created. It must match a state you registered with `when()`.
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+const subscription = defineDomain('subscription', () => {
+  when('trial', () => {
+    on('activate', target('active'));
+    on('expire', target('expired'));
+  });
+  when('active', () => {
+    on('cancel', target('cancelled'));
+  });
+  when('expired', terminal());
+  when('cancelled', terminal());
+
+  // 'trial' is the starting point — must be a registered state
+  return { context: {}, initial: 'trial' };
+});
+
+console.log(subscription.state); // 'trial'
+```
+
+If `initial` names a state that was not registered, the runtime throws `PlexisError` with code `UNKNOWN_INITIAL_STATE` when the domain is created.
+
+## Declaring terminal states
+
+A terminal state is one the domain can enter but never leave. Declare it by passing `terminal()` as the second argument to `when()`. The domain will not follow any event while in a terminal state (following returns `status: 'ignored'`).
+
+```typescript
+when('fulfilled', terminal());
+when('cancelled', terminal());
+```
+
+Terminal states do not need flows registered inside them. Any `on()` calls inside a terminal state's setup function are ignored at runtime.
+
+## Unreachable states
+
+An unreachable state is one that no edge points to and that is not the `initial` state. The domain can never enter it through normal operation.
+
+```typescript
+const broken = defineDomain('broken', () => {
+  when('active', () => {
+    on('done', target('done'));
+  });
+  when('done', terminal());
+  // Nobody transitions to 'orphan' — it is unreachable
+  when('orphan', terminal());
+  return { context: {}, initial: 'active' };
+});
+```
+
+Without strict mode, unreachable states are silently ignored. With `strict: true`, the runtime rejects them at creation time.
+
+## Strict mode
+
+Set `strict: true` in the setup return value to turn graph integrity problems into errors at definition time rather than silent runtime surprises.
+
+```typescript
+const order = defineDomain('order', () => {
+  when('pending', () => {
+    on('submit', target('processing'));
+  });
+  when('processing', terminal());
+  // 'ghost' is unreachable
+  when('ghost', terminal());
+
+  return { context: {}, initial: 'pending', strict: true };
+  // Throws PlexisError at creation: UNREACHABLE_STATE 'ghost'
+});
+```
+
+Strict mode rejects:
+
+- An `initial` that names an unregistered state.
+- Edge targets that name unregistered states.
+- States that are not reachable from `initial` and are not `initial` themselves.
+
+## Reading the graph
+
+After construction, `domain.graph.describe()` returns a `GraphDescriptor` with all nodes and edges. Use it to audit reachability in tests or tooling.
+
+```typescript
+const graph = subscription.graph.describe();
+const unreachable = graph.nodes.filter(
+  (n) =>
+    !graph.entryNodes.some((e) => e.nodeId === n.id) &&
+    !graph.edges.some((e) => e.to.nodeId === n.id),
+);
+console.log(unreachable.map((n) => n.id)); // []
+```
+
+For the full `DomainGraph` API, see the [Domain Instance reference](/reference/domain) and [Graph Introspection](/patterns/graph-introspection) in Patterns.

@@ -1,0 +1,6 @@
+/* Bump font size for MDN-style parameter entries:
+   **`name`** `type` — the bold-code name and the plain-code type that follows */
+.sl-markdown-content strong > code,
+.sl-markdown-content strong + code {
+  font-size: 1.1em;
+}

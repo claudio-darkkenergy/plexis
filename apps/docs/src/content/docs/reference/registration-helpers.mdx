@@ -1,0 +1,262 @@
+---
+title: Registration Helpers
+description: Reference for when, enter, exit, on, node, action, fork, and terminal — the helpers used inside defineDomain and definePipeline setup functions.
+---
+
+These functions are only valid inside an active `defineDomain` or `definePipeline` setup function (or inside `when`/`node` scopes). Calling them outside throws `PlexisError` with code `BUILDER_CLOSED`.
+
+## `when(id, fn | terminal())`
+
+Registers a state in the current domain builder scope.
+
+```typescript
+function when<TContext>(id: string, x: (() => void) | TerminalSentinel): void
+```
+
+### Parameters
+
+**`id`** `string`
+
+Unique state identifier.
+
+**`x`** `(() => void) | TerminalSentinel`
+
+Either a synchronous setup function that calls `enter`, `exit`, and `on` to configure the state, or the result of `terminal()` to register a terminal state with no further behavior.
+
+### Return value
+
+None (`void`).
+
+### Example
+
+```typescript
+import { defineDomain, when, enter, exit, on, terminal } from '@tde.io/plexis';
+
+const door = defineDomain('door', () => {
+  when('closed', () => {
+    exit(async (ctx) => ({ lastClosed: Date.now() }));
+    on('open', target('open'));
+  });
+  when('open', () => {
+    enter(async (ctx) => ({ lastOpened: Date.now() }));
+    on('close', target('closed'));
+  });
+  return { context: { lastOpened: 0, lastClosed: 0 }, initial: 'closed' };
+});
+```
+
+---
+
+## `enter(fn)`
+
+Registers an entry lifecycle hook for the current state. Must be called inside a `when()` setup function.
+
+```typescript
+function enter<TContext>(
+  fn: (ctx: TContext, input: StateHookInput) => PatchLike | Promise<PatchLike>
+): void
+```
+
+---
+
+## `exit(fn)`
+
+Registers an exit lifecycle hook for the current state. Must be called inside a `when()` setup function.
+
+```typescript
+function exit<TContext>(
+  fn: (ctx: TContext, input: StateHookInput) => PatchLike | Promise<PatchLike>
+): void
+```
+
+---
+
+## `on(event, def)`
+
+Registers a flow (event-driven transition) on the current state. Must be called inside a `when()` setup function.
+
+```typescript
+function on<TContext>(event: string, def: OnDef<TContext>): void
+```
+
+### Parameters
+
+**`event`** `string`
+
+Event name that triggers this flow.
+
+**`def`** `OnDef<TContext>`
+
+Flow definition:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | `string` | Yes | ID of the target state |
+| `guard` | `(ctx: TContext, input: GuardInput) => boolean \| Promise<boolean>` | No | Guard predicate; transition is blocked when `false` |
+| `action` | `(ctx: TContext, input: OnActionInput) => PatchLike` | No | Context patch handler run during the transition |
+| `pipeline` | `Pipeline<TContext>` | No | Pipeline to run as part of the transition, after the action |
+| `metadata` | `Record<string, unknown>` | No | Arbitrary user-defined metadata |
+
+### Example
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+type Ctx = { approved: boolean; approvedBy?: string };
+
+const approval = defineDomain<Ctx>('approval', () => {
+  when('pending', () => {
+    on('approve', () => {
+      guard((ctx, { payload }) => payload != null);
+      action((ctx, { payload }) => ({ approvedBy: payload as string }));
+      return target('approved');
+    });
+    on('reject', target('rejected'));
+  });
+  when('approved', terminal());
+  when('rejected', terminal());
+  return { context: { approved: false }, initial: 'pending' };
+});
+```
+
+---
+
+## `node(id, fn | terminal(fn?))`
+
+Registers a node in the current pipeline builder scope.
+
+```typescript
+function node<TContext>(id: string, x: (() => void) | TerminalSentinel): void
+```
+
+### Parameters
+
+**`id`** `string`
+
+Unique node identifier.
+
+**`x`** `(() => void) | TerminalSentinel`
+
+Either a synchronous setup function that calls `action` and `fork` to configure the node, or the result of `terminal(fn?)` to register a terminal node with an optional final action.
+
+### Return value
+
+None (`void`).
+
+### Example
+
+```typescript
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
+
+type Ctx = { score: number; passed: boolean };
+
+const quiz = definePipeline<Ctx>('quiz', () => {
+  node('grade', () => {
+    action(async (ctx) => ({ score: 90 }));
+    fork('pass', target('pass'), (ctx) => ctx.score >= 70);
+    fork('fail', target('fail'), (ctx) => ctx.score < 70);
+  });
+  node('pass', terminal(async () => ({ passed: true })));
+  node('fail', terminal(async () => ({ passed: false })));
+  return { initial: 'grade' };
+});
+```
+
+---
+
+## `action(fn)`
+
+Registers the action handler for the current node. Must be called inside a `node()` setup function.
+
+```typescript
+function action<TContext>(
+  fn: (ctx: TContext, input: PipelineActionInput) => PatchLike | Promise<PatchLike>
+): void
+```
+
+---
+
+## `fork(label, target, condition?)`
+
+Registers a forward transition on the current node in declaration order. Must be called inside a `node()` setup function.
+
+```typescript
+function fork<TContext>(
+  label: string,
+  target: TargetDef,
+  condition?: (ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>
+): void
+```
+
+### Parameters
+
+**`label`** `string`
+
+Required name for this fork. Appears in tracer events and graph introspection output.
+
+**`target`** `TargetDef`
+
+A `target(...)` sentinel wrapping either a node-id string or a sub-pipeline. Pass `target('node-id')` or `target(pipeline)`. Bare strings and bare `Pipeline` objects are rejected at compile time and at runtime.
+
+**`condition`** `((ctx, input) => boolean | Promise<boolean>)` *(optional)*
+
+Fork predicate. Omit for an unconditional forward edge; otherwise the first fork whose condition returns `true` is followed.
+
+### Example
+
+```typescript
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
+
+type Ctx = { score: number };
+
+const pipeline = definePipeline<Ctx>('check', () => {
+  node('evaluate', () => {
+    fork('high-score', target('excellent'), (ctx) => ctx.score >= 90);
+    fork('passing', target('passing'), (ctx) => ctx.score >= 60);
+    fork('failing', target('failing'));  // unconditional fallback
+  });
+  node('excellent', terminal());
+  node('passing', terminal());
+  node('failing', terminal());
+  return { initial: 'evaluate' };
+});
+```
+
+---
+
+## `terminal(fn?)`
+
+Returns a `TerminalSentinel` — a scope-independent branded value accepted as the second argument to `when()` and `node()`. Never throws `BUILDER_CLOSED`; safe to call at any scope level.
+
+```typescript
+function terminal<TContext>(
+  fn?: (ctx: TContext, input: PipelineActionInput) => PatchLike | Promise<PatchLike>
+): TerminalSentinel
+```
+
+### Parameters
+
+**`fn`** *(optional)*
+
+Optional final action that runs when a terminal **node** is reached (ignored for terminal states). Its patch is merged before the run completes.
+
+### Return value
+
+`TerminalSentinel` — a branded sentinel object.
+
+### Example
+
+```typescript
+import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+
+type Ctx = { result: string };
+
+const pipeline = definePipeline<Ctx>('process', () => {
+  node('start', () => {
+    fork('next', target('finish'));
+  });
+  // terminal with a final action that patches context before stopping
+  node('finish', terminal(async (ctx) => ({ result: 'done' })));
+  return { initial: 'start' };
+});
+```

@@ -1,0 +1,124 @@
+---
+title: Reusable Definition Factories
+description: Wrap defineDomain or definePipeline in a plain function to create parameterized definitions you can instantiate more than once with different configuration.
+---
+
+`defineDomain` and `definePipeline` return a fully-constructed runtime object each time they are called. Wrapping them in a factory function gives you a reusable blueprint — call the factory with different parameters to get independent instances.
+
+## A domain factory
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+type OrderCtx = { orderId: string; userId: string; total: number };
+
+function createOrderDomain(orderId: string, userId: string) {
+  return defineDomain<OrderCtx>('order', () => {
+    when('pending', () => {
+      on('submit', target('processing'));
+      on('cancel', target('cancelled'));
+    });
+    when('processing', () => {
+      on('fulfill', target('fulfilled'));
+    });
+    when('fulfilled', terminal());
+    when('cancelled', terminal());
+
+    return {
+      context: { orderId, userId, total: 0 },
+      initial: 'pending',
+    };
+  });
+}
+
+// Each call returns an independent domain with its own state and context
+const orderA = createOrderDomain('ord_1', 'user_1');
+const orderB = createOrderDomain('ord_2', 'user_2');
+
+await orderA.follow('submit');
+
+console.log(orderA.state); // 'processing'
+console.log(orderB.state); // 'pending' — independent
+```
+
+## A pipeline factory
+
+```typescript
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
+
+type ChargeCtx = { amount: number; currency: string; charged: boolean };
+
+function createChargePipeline(maxAmount: number) {
+  return definePipeline<ChargeCtx>('charge', () => {
+    node('validate', () => {
+      fork('charge', target('charge'), (ctx) => ctx.amount <= maxAmount);
+      fork('exceeds-limit', target('reject'), (ctx) => ctx.amount > maxAmount);
+    });
+    node('charge', () => {
+      action(async (ctx) => ({ charged: true }));
+      fork('next', target('done'));
+    });
+    node('reject', terminal());
+    node('done', terminal());
+
+    return { initial: 'validate' };
+  });
+}
+
+// Two pipelines with different amount limits
+const smallCharge = createChargePipeline(100);
+const largeCharge = createChargePipeline(10_000);
+
+const result1 = await smallCharge.run({ amount: 50, currency: 'USD', charged: false });
+const result2 = await smallCharge.run({ amount: 500, currency: 'USD', charged: false });
+const result3 = await largeCharge.run({ amount: 5000, currency: 'USD', charged: false });
+
+console.log(result1.finalNode); // 'done' — within limit
+console.log(result2.finalNode); // 'reject' — exceeds small limit
+console.log(result3.finalNode); // 'done' — within large limit
+```
+
+## Sharing sub-pipelines across factory instances
+
+A sub-pipeline referenced by a factory is the same object each time if you define it outside the factory. This is fine — pipelines are stateless, so sharing them is safe.
+
+```typescript
+import { definePipeline, defineDomain, when, on, node, fork, terminal } from '@tde.io/plexis';
+
+// Defined once, shared across all factory calls
+const sendReceipt = definePipeline('send-receipt', () => {
+  node('email', terminal());
+  return { initial: 'email' };
+});
+
+function createCheckout(storeId: string) {
+  return defineDomain('checkout', () => {
+    when('cart', () => {
+      on('pay', () => { pipeline(sendReceipt); return target('paid'); });
+    });
+    when('paid', terminal());
+    return { context: { storeId }, initial: 'cart' };
+  });
+}
+
+const store1 = createCheckout('store_a');
+const store2 = createCheckout('store_b');
+// Both use the same sendReceipt pipeline — no duplication, no shared runtime state
+```
+
+## Typing the factory return value
+
+TypeScript infers the return type of `defineDomain` and `definePipeline` from the setup function. If you want to annotate the factory's return type explicitly, import `Domain` and `Pipeline` from the library:
+
+```typescript
+import type { Domain, Pipeline } from '@tde.io/plexis';
+
+function createOrderDomain(orderId: string): Domain<OrderCtx, 'submit' | 'cancel' | 'fulfill'> {
+  return defineDomain<OrderCtx, 'submit' | 'cancel' | 'fulfill'>('order', () => {
+    // ...
+    return { context: { orderId, userId: '', total: 0 }, initial: 'pending' };
+  });
+}
+```
+
+For the `defineDomain` and `definePipeline` signatures, see the [Definition Functions reference](/reference/definition-functions).

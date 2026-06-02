@@ -28,7 +28,11 @@
       "Bash(pnpm docs:build *)",
       "Bash(pnpm -r list --depth -1)",
       "Bash(openspec validate *)",
-      "Bash(openspec --version)"
+      "Bash(openspec --version)",
+      "Bash(pnpm --filter @tde.io/docs build)",
+      "Bash(grep -v \":0$\")",
+      "Bash(grep -rn \"node\\('.*', {\" /Users/claudionunezjr/Documents/Projects/plexis/apps/docs/src/content/docs/)",
+      "Bash(echo \"---exit:$?---\")"
     ]
   }
 }

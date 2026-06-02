@@ -1,0 +1,94 @@
+---
+title: Reactive Subscriptions
+description: Subscribe to domain transitions with domain.subscribe, read the current snapshot in the callback, and clean up with the returned unsubscribe function.
+---
+
+`domain.subscribe()` registers a listener that is called every time the domain completes a transition. It returns a cleanup function. This is the framework-agnostic reactive seam — use it to trigger UI updates, log side effects, or synchronize external state after each transition.
+
+## Basic subscription
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+const order = defineDomain('order', () => {
+  when('pending', () => {
+    on('submit', target('processing'));
+  });
+  when('processing', terminal());
+  return { context: { orderId: 'ord_1' }, initial: 'pending' };
+});
+
+// Register a listener — called after each completed transition
+const unsubscribe = order.subscribe((snapshot) => {
+  console.log(`State: ${snapshot.state}`);
+  console.log(`Context:`, snapshot.context);
+  console.log(`History length: ${snapshot.historyLength}`);
+});
+
+await order.follow('submit');
+// → State: processing
+// → Context: { orderId: 'ord_1' }
+// → History length: 1
+```
+
+The listener receives a `DomainSnapshot` — `{ state, context, historyLength }`. It is called synchronously after step 8 of the `follow()` lifecycle (after history is recorded).
+
+## The unsubscribe function
+
+`subscribe()` returns a zero-argument function. Call it to stop receiving updates. This is important for long-lived domains used in components or services that are later destroyed.
+
+```typescript
+const unsubscribe = order.subscribe((snap) => {
+  externalStore.set(snap);
+});
+
+// Later, when the component or service is torn down
+unsubscribe();
+```
+
+Multiple subscribers can be registered on the same domain. Each `subscribe()` call returns its own cleanup function; you must call each one separately.
+
+## Reading a snapshot outside a listener
+
+`domain.snapshot()` returns the current snapshot without subscribing. Use it to read current state once, or to seed a UI framework's initial value before subscribing to updates.
+
+```typescript
+// Read once for initialization
+const initial = order.snapshot();
+
+// Then subscribe for updates
+const unsubscribe = order.subscribe((snap) => {
+  render(snap);
+});
+```
+
+## Multiple subscribers
+
+```typescript
+const log = order.subscribe((snap) => console.log('log:', snap.state));
+const store = order.subscribe((snap) => externalStore.set(snap));
+
+await order.follow('submit');
+// Both listeners are called
+
+log();   // stop logging
+// store listener still active
+store(); // stop store sync
+```
+
+## No-op on terminal states
+
+Listeners are called after each completed transition. Because a terminal state cannot be exited, no further transitions happen after entering one — so the subscriber is called once when the terminal is reached and then never again.
+
+```typescript
+order.subscribe((snap) => {
+  if (snap.state === 'processing') {
+    cleanup(); // safe to call — 'processing' is terminal, this fires exactly once
+  }
+});
+
+await order.follow('submit'); // listener fires with state: 'processing'
+// No more follows are possible from a terminal state
+```
+
+For framework-specific bindings that build on `subscribe` and `snapshot`, see the [React integration](/guides/integrations/react) and [Vue integration](/guides/integrations/vue). For the `DomainSnapshot` type and `subscribe()` signature, see the [Domain Instance reference](/reference/domain).

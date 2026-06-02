@@ -3,7 +3,7 @@ export { defineDomain, Domain } from './core/domain.js';
 export { definePipeline, Pipeline } from './core/pipeline.js';
 export { createTracer, Tracer } from './core/tracer.js';
 export { PlexisError } from './core/errors.js';
-export { state, edge, node, fork, terminal } from './core/helpers.js';
+export { when, enter, exit, on, target, guard, pipeline, node, action, fork, terminal } from './core/helpers.js';
 
 // Type-only re-exports for consumers
 export type {
@@ -25,7 +25,7 @@ export type {
   GraphPath,
   PathQueryOptions,
   NodeInspection,
-  PipelineActionInput,
+  ActionInput,
   PipelineConditionInput,
   PipelineForkDef,
   PipelineNodeDef,
@@ -35,9 +35,8 @@ export type {
   PipelineGraph,
   StateHookInput,
   GuardInput,
-  TransitionActionInput,
-  EdgeDef,
-  StateNodeDef,
+  OnDef,
+  WhenDef,
   DomainConfig,
   DomainFollowResult,
   DomainSnapshot,
@@ -48,5 +47,10 @@ export type {
   DefineDomainOptions,
   PipelineSetupResult,
   DefinePipelineOptions,
+  TerminalSentinel,
+  TargetDef,
+  OnSetupFn,
+  OnGuardInput,
+  PlexisErrorCode,
   InferEdges,
 } from './types.js';

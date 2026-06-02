@@ -1,0 +1,122 @@
+---
+title: Custom Merge
+description: Override the default shallow merge to handle nested objects, arrays, or key removal by supplying a custom merge function in your domain or pipeline options.
+---
+
+By default Plexis merges context patches with `{ ...previous, ...patch }` — a shallow merge that overwrites top-level keys and leaves anything not in the patch unchanged. That is correct for flat context shapes. When your context has nested objects, arrays you want to append to, or keys you need to delete, supply a custom `merge` function.
+
+## The default shallow merge
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+type Ctx = { orderId: string; flags: { paid: boolean; shipped: boolean } };
+
+const order = defineDomain<Ctx>('order', () => {
+  when('pending', () => {});
+  when('paid', terminal());
+  return {
+    context: { orderId: 'ord_1', flags: { paid: false, shipped: false } },
+    initial: 'pending',
+  };
+});
+
+await order.follow('pay');
+console.log(order.context.flags);
+// { paid: true }  ← shipped is gone — shallow merge replaced flags entirely
+```
+
+## Supplying a custom merge
+
+Pass `merge` in the second argument to `defineDomain` or `definePipeline`. The function receives `(previous, patch, metadata)` and must return a complete new context object — it must not mutate `previous`.
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+type Ctx = { orderId: string; flags: { paid: boolean; shipped: boolean } };
+
+const order = defineDomain<Ctx>(
+  'order',
+  () => {
+    when('pending', () => {});
+    when('paid', terminal());
+    return {
+      context: { orderId: 'ord_1', flags: { paid: false, shipped: false } },
+      initial: 'pending',
+    };
+  },
+  {
+    merge: (previous, patch) => ({
+      ...previous,
+      ...patch,
+      // Deep-merge flags so partial updates preserve sibling keys
+      ...(patch.flags !== undefined
+        ? { flags: { ...previous.flags, ...patch.flags } }
+        : {}),
+    }),
+  },
+);
+
+await order.follow('pay');
+console.log(order.context.flags);
+// { paid: true, shipped: false }  ← shipped is preserved
+```
+
+## Array append
+
+Use the same pattern to append to arrays rather than replace them:
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+type Ctx = { items: string[] };
+
+const cart = defineDomain<Ctx>(
+  'cart',
+  () => {
+    when('open', () => {
+      on('add', () => {
+        action(async (ctx, { payload }) => ({ items: [payload as string] }));
+        return target('open');
+      });
+    });
+    return { context: { items: [] }, initial: 'open' };
+  },
+  {
+    merge: (previous, patch) => ({
+      ...previous,
+      ...patch,
+      ...(patch.items !== undefined
+        ? { items: [...previous.items, ...patch.items] }
+        : {}),
+    }),
+  },
+);
+
+await cart.follow('add', 'book');
+await cart.follow('add', 'pen');
+console.log(cart.context.items); // ['book', 'pen']
+```
+
+## Key deletion
+
+To delete a key, return a custom merge that omits it. TypeScript optional fields pair well with this pattern:
+
+```typescript
+type Ctx = { orderId: string; discount?: number };
+
+const merge = (previous: Ctx, patch: Partial<Ctx>) => {
+  const next = { ...previous, ...patch };
+  // patch.discount === null signals deletion
+  if ((patch as any).discount === null) {
+    delete next.discount;
+  }
+  return next;
+};
+```
+
+## The `metadata` argument
+
+The third argument to `merge` is a `MergeMetadata` object with fields like `phase`, `domainId`, `pipelineId`, `stateId`, and `event`. Use it to apply different merge strategies per phase if needed — for example, deep merge only during `enter` but shallow merge on edge actions.
+
+For full type signatures, see the [Definition Functions reference](/reference/definition-functions).
