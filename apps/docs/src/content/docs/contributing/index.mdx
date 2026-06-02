@@ -126,3 +126,5 @@ CI runs only on pull requests (for development) and on `v*.*.*` tags (for releas
 The tag push triggers the `build`, `test`, and `publish` jobs in sequence. After the `publish` job succeeds, the `smoke-test.yml` workflow runs to validate the published package.
 
 The Publish workflow authenticates via GitHub OIDC — no `NPM_TOKEN` secret is needed.
+
+> **Trusted publishing is coupled to the workflow filename.** npm's trusted-publisher record for `@tde.io/plexis` (configured at [npmjs.com → package access settings](https://www.npmjs.com/package/@tde.io/plexis/access)) names the exact workflow file that runs `pnpm publish` — currently `build.yml`. GitHub mints an OIDC token whose `job_workflow_ref` embeds that filename, and npm only completes the token exchange when it matches the record. If you ever move or rename the `publish` job's workflow file, update the npm trusted-publisher record in the same change — otherwise the next release fails the OIDC token exchange. The `publish` job guards against this by failing loudly with a remediation hint when OIDC is skipped, rather than silently attempting an unauthenticated publish.
