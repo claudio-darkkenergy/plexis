@@ -20,5 +20,5 @@
 
 ## 5. Validation
 
-- [ ] 5.1 On the next `v*.*.*` tag push, confirm the `publish` job authenticates via OIDC (no `Skipped OIDC` warning) and publishes successfully.
-- [ ] 5.2 Verify the published version appears on npm with a provenance statement linked to the GitHub Actions run, and that the smoke-test workflow passes.
+- [x] 5.1 On the next `v*.*.*` tag push, confirm the `publish` job authenticates via OIDC (no `Skipped OIDC` warning) and publishes successfully.
+- [x] 5.2 Verify the published version appears on npm with a provenance statement linked to the GitHub Actions run, and that the smoke-test workflow passes.

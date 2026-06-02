@@ -14,6 +14,10 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
       - name: Smoke-test published package
         run: |
           VERSION=$(node -p "require('./packages/plexis/package.json').version")
@@ -42,8 +46,8 @@ jobs:
 
           # ESM — named exports resolve and are callable
           node --input-type=module -e "
-            import { defineDomain, definePipeline, state, edge, node, fork, terminal, createTracer, PlexisError } from '@tde.io/plexis';
-            const fns = { defineDomain, definePipeline, state, edge, node, fork, terminal, createTracer };
+            import { defineDomain, definePipeline, when, on, target, guard, action, enter, exit, node, fork, terminal, pipeline, createTracer, PlexisError } from '@tde.io/plexis';
+            const fns = { defineDomain, definePipeline, when, on, target, guard, action, enter, exit, node, fork, terminal, pipeline, createTracer };
             for (const [name, fn] of Object.entries(fns)) {
               if (typeof fn !== 'function') throw new Error('ESM: ' + name + ' is not a function');
             }
@@ -54,7 +58,7 @@ jobs:
           # CJS — same check via require()
           node -e "
             const pkg = require('@tde.io/plexis');
-            const fns = ['defineDomain', 'definePipeline', 'state', 'edge', 'node', 'fork', 'terminal', 'createTracer'];
+            const fns = ['defineDomain', 'definePipeline', 'when', 'on', 'target', 'guard', 'action', 'enter', 'exit', 'node', 'fork', 'terminal', 'pipeline', 'createTracer'];
             for (const name of fns) {
               if (typeof pkg[name] !== 'function') throw new Error('CJS: ' + name + ' is not a function');
             }
