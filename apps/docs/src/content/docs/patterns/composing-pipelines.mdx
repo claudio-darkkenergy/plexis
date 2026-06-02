@@ -1,0 +1,110 @@
+---
+title: Composing Pipelines
+description: Build larger workflows from smaller reusable ones by embedding a Pipeline as a fork target, and attach the same pipeline at multiple sites.
+---
+
+A fork target can be a `Pipeline` object instead of a node ID string. When a fork selects a sub-pipeline, the runtime runs the sub-pipeline against the current context and then continues from where the fork was — or stops if the sub-pipeline ended at a terminal. This is how you compose large workflows from smaller, tested pieces.
+
+## Sub-pipeline as a fork target
+
+```typescript
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
+
+// A small, reusable pipeline
+const notifyUser = definePipeline('notify-user', () => {
+  node('send-email', () => {
+    action(async (ctx) => ({ notified: true }));
+    fork('next', target('done'));
+  });
+  node('done', terminal());
+  return { initial: 'send-email' };
+});
+
+// A larger pipeline that embeds notifyUser as a branch
+const onboard = definePipeline('onboard', () => {
+  node('create-account', () => {
+    action(async (ctx) => ({ accountCreated: true }));
+    fork('notify', target(notifyUser), (ctx) => ctx.accountCreated);
+    fork('fail', target('fail'), (ctx) => !ctx.accountCreated);
+  });
+  node('fail', terminal());
+  return { initial: 'create-account' };
+});
+
+const result = await onboard.run({ accountCreated: false });
+// create-account action sets accountCreated: true
+// notifyUser sub-pipeline runs, sets notified: true
+// result.context === { accountCreated: true, notified: true }
+```
+
+When the sub-pipeline finishes, its final context flows back into the parent as if the fork had returned that context directly.
+
+## Reusing a pipeline at multiple sites
+
+Because a `Pipeline` is just an object, you can pass it as a fork target in multiple pipelines or attach it to multiple domain states. Each invocation is independent.
+
+```typescript
+import { definePipeline, defineDomain, when, on, node, fork, terminal } from '@tde.io/plexis';
+
+const sendReceipt = definePipeline('send-receipt', () => {
+  node('email', () => {
+    action(async (ctx) => ({ receiptSent: true }));
+    fork('next', target('done'));
+  });
+  node('done', terminal());
+  return { initial: 'email' };
+});
+
+// Used as a fork target in one pipeline
+const checkout = definePipeline('checkout', () => {
+  node('charge', () => {
+    action(async (ctx) => ({ charged: true }));
+    fork('receipt', target(sendReceipt), (ctx) => ctx.charged);
+  });
+  return { initial: 'charge' };
+});
+
+// Also attached to a domain state entry
+const order = defineDomain('order', () => {
+  when('pending', () => {
+    on('pay', target('paid'));
+  });
+  when('paid', terminal());
+  return { context: {}, initial: 'pending' };
+});
+```
+
+`sendReceipt` runs fresh each time — there is no shared state between its invocations.
+
+## Context flows through the composition chain
+
+Context is passed into the parent pipeline's `run()`, merged as each node action runs, and passed into the sub-pipeline's `run()` when the fork triggers it. The sub-pipeline's final context becomes the parent's context for any subsequent nodes.
+
+```typescript
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
+
+type Ctx = { amount: number; taxed: boolean; total: number };
+
+const applyTax = definePipeline<Ctx>('apply-tax', () => {
+  node('tax', () => {
+    action(async (ctx) => ({ taxed: true, total: ctx.amount * 1.1 }));
+    fork('next', target('done'));
+  });
+  node('done', terminal());
+  return { initial: 'tax' };
+});
+
+const invoice = definePipeline<Ctx>('invoice', () => {
+  node('validate', () => {
+    action(async (ctx) => ({ amount: 100 }));
+    fork('apply-tax', target(applyTax), (ctx) => ctx.amount > 0);
+  });
+  return { initial: 'validate' };
+});
+
+const result = await invoice.run({ amount: 0, taxed: false, total: 0 });
+// validate sets amount: 100 → condition is true → applyTax runs
+// result.context.total === 110
+```
+
+For full `Pipeline` signatures, see the [Pipeline reference](/reference/pipeline).

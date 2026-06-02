@@ -1,0 +1,98 @@
+---
+title: The Two-Layer Model
+description: Understand the difference between Domain (durable cross-time state) and Pipeline (run-once finite workflow) and know when to reach for each.
+---
+
+Plexis models business logic as two distinct things: long-lived state that outlasts a single operation, and finite workflows that complete and are done. Keeping these separate is the central design decision the library is built around.
+
+## Domain — durable state across time
+
+A **Domain** is a state machine that persists. It holds the current state, context, and transition history for the lifetime of the object. Each call to `domain.follow()` moves the machine from one state to another and returns the new context. The machine is still there after the transition, ready to handle the next event.
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+const order = defineDomain('order', () => {
+  when('pending', () => {
+    on('submit', target('processing'));
+  });
+  when('processing', () => {
+    on('fulfill', target('fulfilled'));
+    on('cancel', target('cancelled'));
+  });
+  when('fulfilled', terminal());
+  when('cancelled', terminal());
+
+  return { context: { orderId: 'ord_1' }, initial: 'pending' };
+});
+
+// Later — same domain instance, multiple events over time
+await order.follow('submit');   // pending → processing
+await order.follow('fulfill'); // processing → fulfilled
+```
+
+The domain retains its state between operations. `order.state` is `'fulfilled'` after both calls, and `order.history()` records the full path.
+
+## Pipeline — a run-once finite workflow
+
+A **Pipeline** is a workflow that executes start-to-finish in a single invocation. It begins at the `initial` node, evaluates fork conditions to decide which node comes next, runs node actions, and stops at a terminal node (or when no fork matches). After `pipeline.run()` returns, the pipeline itself is unchanged — you can call `run()` again with different context.
+
+```typescript
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
+
+const validatePayment = definePipeline('validate-payment', () => {
+  node('check-card', () => {
+    action(async (ctx) => ({ checked: true }));
+    fork('valid', target('charge'), (ctx) => ctx.cardValid);
+    fork('invalid', target('decline'), (ctx) => !ctx.cardValid);
+  });
+  node('charge', terminal());
+  node('decline', terminal());
+
+  return { initial: 'check-card' };
+});
+
+const result = await validatePayment.run({ cardValid: true });
+// result.finalNode === 'charge'
+// result.status === 'completed'
+```
+
+Each `run()` is isolated. There is no "current state" on the pipeline — context flows in, a result comes out.
+
+## Choosing which layer to use
+
+| Question | Domain | Pipeline |
+|---|---|---|
+| Does this persist between operations? | Yes | No |
+| Does it have states a user navigates over time? | Yes | No |
+| Is it a single, finite execution path? | No | Yes |
+| Can it be run again from scratch? | No (restore needed) | Yes, any time |
+
+**Use a Domain when** the entity exists across time and different events drive it forward — an order, a subscription, a user session.
+
+**Use a Pipeline when** you need a defined execution path from start to finish — a payment flow, a validation sequence, a multi-step transformation.
+
+**Combine them** when a domain flow triggers a workflow: attach a Pipeline to a flow or a state entry hook. The Domain manages which stage the business object is at; the Pipeline handles the work of getting there.
+
+```typescript
+import { defineDomain, definePipeline, when, on, node, action, fork, terminal } from '@tde.io/plexis';
+
+const chargeCard = definePipeline('charge-card', () => {
+  node('charge', () => {
+    action(async (ctx) => ({ charged: true }));
+    fork('next', target('done'));
+  });
+  node('done', terminal());
+  return { initial: 'charge' };
+});
+
+const checkout = defineDomain('checkout', () => {
+  when('cart', () => {
+    on('checkout', () => { pipeline(chargeCard); return target('processing'); });
+  });
+  when('processing', terminal());
+  return { context: {}, initial: 'cart' };
+});
+```
+
+For signatures and full API details, see the [Domain reference](/reference/domain) and [Pipeline reference](/reference/pipeline).

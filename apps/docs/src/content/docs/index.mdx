@@ -25,39 +25,35 @@ npm install @tde.io/plexis
 Define a pipeline and domain, then drive the domain forward:
 
 ```typescript
-import { defineDomain, definePipeline, state, edge, node, fork, terminal } from '@tde.io/plexis';
+import { defineDomain, definePipeline, when, on, target, pipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 type OrderContext = { cardValid: boolean };
 
 // Pipeline: runs once per invocation — validate then route to charge or decline
 const payment = definePipeline<OrderContext>('payment', () => {
-  node('validate', {
-    forks: [
-      fork((ctx) => ctx.cardValid,  'charge',  { label: 'card-ok' }),
-      fork((ctx) => !ctx.cardValid, 'decline', { label: 'card-invalid' }),
-    ],
+  node('validate', () => {
+    fork('card-ok', target('charge'), (ctx) => ctx.cardValid);
+    fork('card-invalid', target('decline'), (ctx) => !ctx.cardValid);
   });
-  node('charge',  terminal());
+  node('charge', terminal());
   node('decline', terminal());
   return { initial: 'validate' };
 });
 
 // Domain: durable order state — pending → processing → fulfilled
 const order = defineDomain<OrderContext>('order', () => {
-  state('pending', {
-    edges: {
-      SUBMIT: edge({ target: 'processing', pipeline: payment }),
-    },
+  when('pending', () => {
+    on('submit', () => { pipeline(payment); return target('processing'); });
   });
-  state('processing', {
-    edges: { FULFILL: edge({ target: 'fulfilled' }) },
+  when('processing', () => {
+    on('fulfill', target('fulfilled'));
   });
-  state('fulfilled', { terminal: true });
+  when('fulfilled', terminal());
   return { context: { cardValid: true }, initial: 'pending' } as const;
 });
 
 // Drive the domain forward
-const result = await order.follow('SUBMIT');
+const result = await order.follow('submit');
 console.log(result.status); // 'followed'
 console.log(result.to);     // 'processing'
 ```
@@ -66,11 +62,11 @@ console.log(result.to);     // 'processing'
 
 Plexis separates business logic into two complementary layers:
 
-**[Domain](/guides/domain/)** — durable state that persists across time. A domain has named states, transitions (edges) triggered by events, optional guards, lifecycle hooks (`onEnter`/`onExit`), and can invoke pipelines on transitions. Define one with `defineDomain()` and advance it with `domain.follow(event)`.
+**[Domain](/guides/domain/)** — durable state that persists across time. A domain has named states, flows triggered by events, optional guards, lifecycle hooks (`enter`/`exit`), and can invoke pipelines on flows. Define one with `defineDomain()` and advance it with `domain.follow(event)`.
 
 **[Pipeline](/guides/pipeline/)** — a finite, single-run workflow. Execution starts at the initial node and follows the first matching fork at each step until it reaches a terminal node. Define one with `definePipeline()` and run it with `pipeline.run(context)`.
 
-The two layers compose naturally: an edge on a domain can invoke a pipeline, so workflow logic (validation, enrichment, side effects) lives in the pipeline while the domain tracks the resulting state.
+The two layers compose naturally: a flow on a domain can invoke a pipeline, so workflow logic (validation, enrichment, side effects) lives in the pipeline while the domain tracks the resulting state.
 
 ## Zero Dependencies
 

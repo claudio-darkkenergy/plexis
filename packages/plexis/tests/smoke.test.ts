@@ -7,9 +7,15 @@ describe('public API surface', () => {
     expect(typeof plexis.defineDomain).toBe('function');
     expect(typeof plexis.definePipeline).toBe('function');
     expect(typeof plexis.createTracer).toBe('function');
-    expect(typeof plexis.state).toBe('function');
-    expect(typeof plexis.edge).toBe('function');
+    expect(typeof plexis.when).toBe('function');
+    expect(typeof plexis.enter).toBe('function');
+    expect(typeof plexis.exit).toBe('function');
+    expect(typeof plexis.on).toBe('function');
+    expect(typeof plexis.target).toBe('function');
+    expect(typeof plexis.guard).toBe('function');
+    expect(typeof plexis.pipeline).toBe('function');
     expect(typeof plexis.node).toBe('function');
+    expect(typeof plexis.action).toBe('function');
     expect(typeof plexis.fork).toBe('function');
     expect(typeof plexis.terminal).toBe('function');
     expect(typeof plexis.Domain).toBe('function');
@@ -17,4 +23,5 @@ describe('public API surface', () => {
     expect(typeof plexis.Tracer).toBe('function');
     expect(typeof plexis.PlexisError).toBe('function');
   });
+
 });

@@ -1,0 +1,176 @@
+---
+title: Handler Input Types
+description: Reference for GuardInput, OnActionInput, StateHookInput, PipelineActionInput, and PipelineConditionInput.
+---
+
+These types are passed as the second argument to guards, actions, hooks, and fork conditions.
+
+## `GuardInput`
+
+Passed to flow guard functions: `guard: (ctx, input: GuardInput) => boolean`.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `event` | `string` | Yes | Event name that triggered the transition check |
+| `payload` | `unknown` | No | Optional event payload |
+| `traceId` | `string` | Yes | Active trace ID |
+
+### Example
+
+```typescript
+import { defineDomain, when, on } from '@tde.io/plexis';
+import type { GuardInput } from '@tde.io/plexis';
+
+type Ctx = { balance: number };
+
+const account = defineDomain<Ctx>('account', () => {
+  when('active', () => {
+    on('withdraw', () => {
+      guard((ctx, input: GuardInput) => {
+        const amount = input.payload as number;
+        return ctx.balance >= amount;
+      });
+      return target('active');
+    });
+  });
+  return { context: { balance: 100 }, initial: 'active' };
+});
+```
+
+---
+
+## `OnActionInput`
+
+Passed to flow action functions: `action: (ctx, input: OnActionInput) => PatchLike`.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `event` | `string` | Yes | Event name that triggered the transition |
+| `payload` | `unknown` | No | Optional event payload |
+| `traceId` | `string` | Yes | Active trace ID |
+
+### Example
+
+```typescript
+import { defineDomain, when, on } from '@tde.io/plexis';
+import type { OnActionInput } from '@tde.io/plexis';
+
+type Ctx = { balance: number; lastEvent: string };
+
+const account = defineDomain<Ctx>('account', () => {
+  when('active', () => {
+    on('deposit', () => {
+      action((ctx, input: OnActionInput) => ({
+        balance: ctx.balance + (input.payload as number),
+        lastEvent: input.event,
+      }));
+      return target('active');
+    });
+  });
+  return { context: { balance: 0, lastEvent: '' }, initial: 'active' };
+});
+```
+
+---
+
+## `StateHookInput`
+
+Passed to `enter` and `exit` hooks: `enter(fn)` where `fn: (ctx, input: StateHookInput) => PatchLike`.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `event` | `string` | No | Event that caused the state entry or exit; absent for the initial state entry |
+| `payload` | `unknown` | No | Optional event payload |
+| `traceId` | `string` | Yes | Active trace ID |
+
+### Example
+
+```typescript
+import { defineDomain, when, enter, on } from '@tde.io/plexis';
+import type { StateHookInput } from '@tde.io/plexis';
+
+type Ctx = { enteredVia: string };
+
+const machine = defineDomain<Ctx>('machine', () => {
+  when('idle', () => { on('start', target('running')); });
+  when('running', () => {
+    enter((ctx, input: StateHookInput) => ({
+      enteredVia: input.event ?? 'initial',
+    }));
+    on('stop', target('idle'));
+  });
+  return { context: { enteredVia: '' }, initial: 'idle' };
+});
+```
+
+---
+
+## `PipelineActionInput`
+
+Passed to pipeline node action functions: `action(fn)` where `fn: (ctx, input: PipelineActionInput) => PatchLike`.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `input` | `unknown` | No | Value passed as the second argument to `pipeline.run(context, input?)` |
+| `nodeId` | `string` | Yes | ID of the current node |
+| `pipelineId` | `string` | Yes | ID of the pipeline |
+| `traceId` | `string` | Yes | Active trace ID |
+
+### Example
+
+```typescript
+import { definePipeline, node, terminal } from '@tde.io/plexis';
+import type { PipelineActionInput } from '@tde.io/plexis';
+
+type Ctx = { processed: boolean; inputValue: unknown };
+
+const pipeline = definePipeline<Ctx>('process', () => {
+  node('handle', terminal((ctx, input: PipelineActionInput) => ({
+    processed: true,
+    inputValue: input.input,
+  })));
+  return { initial: 'handle' };
+});
+
+// The value passed to run() is available as input.input in the action:
+await pipeline.run({ processed: false, inputValue: null }, { userId: 'u1' });
+```
+
+---
+
+## `PipelineConditionInput`
+
+Passed to fork condition functions: `fork(label, target, (ctx, input: PipelineConditionInput) => boolean)`.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `input` | `unknown` | No | Value passed as the second argument to `pipeline.run(context, input?)` |
+| `nodeId` | `string` | Yes | ID of the current node |
+| `pipelineId` | `string` | Yes | ID of the pipeline |
+| `traceId` | `string` | Yes | Active trace ID |
+
+### Example
+
+```typescript
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
+import type { PipelineConditionInput } from '@tde.io/plexis';
+
+type Ctx = { score: number };
+
+const pipeline = definePipeline<Ctx>('grade', () => {
+  node('decide', () => {
+    fork(
+      'pass',
+      target('pass'),
+      (ctx, input: PipelineConditionInput) => {
+        const threshold = (input.input as { threshold: number }).threshold;
+        return ctx.score >= threshold;
+      }
+    );
+    fork('fail', target('fail'));
+  });
+  node('pass', terminal());
+  node('fail', terminal());
+  return { initial: 'decide' };
+});
+```

@@ -48,8 +48,8 @@ src/
 │   ├── tracer.ts               # Tracer class + createTracer factory
 │   ├── errors.ts               # PlexisError class + static factory helpers
 │   ├── context.ts              # mergePatch / applyMerge + MergeMetadata
-│   └── helpers.ts              # Registration helpers: state, edge, node, fork, terminal
-│                                 + the module-level builder-scope cell
+│   └── helpers.ts              # Registration helpers: when, enter, exit, on, target, guard, pipeline, node, action, fork, terminal
+│                                 + the nested builder-scope stack (domain | when | on | pipeline | node scopes)
 ├── graph/                      # Static graph layer (planned; created by bootstrap-plexis-core)
 │   ├── descriptor.ts           # GraphDescriptor builder
 │   ├── paths.ts                # pathsTo, pathsFrom, reachableFrom, inbound, outbound
@@ -84,6 +84,48 @@ dist/                           # Build output (gitignored)
 - `src/graph/*` — pure functions over `GraphDescriptor`. No runtime side effects, no imports from `src/core/` (graph is consumed by core, not the other way around).
 - `src/types.ts` — types only, no runtime code.
 - `src/index.js` — re-exports only, no logic.
+
+---
+
+## Docs Site Structure (`apps/docs/`)
+
+The docs site is an **Astro + Starlight** app at `apps/docs/`. Content lives under `apps/docs/src/content/docs/` in five learning buckets plus Reference and Contributing. The sidebar in `apps/docs/astro.config.mjs` renders them in reading order.
+
+### Content buckets
+
+| Bucket | Path | What lives here |
+|---|---|---|
+| Concepts | `concepts/` | Cross-cutting mental models — the "why", no step-by-step how-to |
+| Guides | `guides/` | Per-primitive walkthroughs (domain, pipeline, tracer, error-handling) |
+| Patterns | `patterns/` | Single framework-agnostic technique pages |
+| Advanced | `guides/advanced/` | Heavyweight multi-primitive worked examples; framework-neutral only |
+| Integrations | `guides/integrations/` | Guides scoped to a named third-party target (React, Vue) |
+| Reference | `reference/` | API reference pages |
+| Contributing | `contributing/` | Contributor guide |
+
+### Sidebar order (enforced by specs)
+
+`Concepts → Guides → Patterns → Advanced → Integrations → Reference → Contributing`
+
+### Content files
+
+**Concepts (4):** `concepts/two-layer-model.mdx`, `concepts/context-and-patches.mdx`, `concepts/execution-and-lifecycle.mdx`, `concepts/definition-lifecycle.mdx`
+
+**Patterns (11):** `patterns/custom-merge.mdx`, `patterns/composing-pipelines.mdx`, `patterns/forks-in-depth.mdx`, `patterns/guards-vs-forks.mdx`, `patterns/designing-the-state-graph.mdx`, `patterns/snapshots-and-restore.mdx`, `patterns/type-safe-domains.mdx`, `patterns/testing.mdx`, `patterns/graph-introspection.mdx`, `patterns/reactive-subscriptions.mdx`, `patterns/reusable-factories.mdx`
+
+**Advanced (5):** `guides/advanced/api-route.mdx`, `guides/advanced/multi-step-form.mdx`, `guides/advanced/saga.mdx`, `guides/advanced/persist-and-rehydrate.mdx`, `guides/advanced/state-graph-visualizer.mdx`
+
+**Integrations (2):** `guides/integrations/react.mdx`, `guides/integrations/vue.mdx`
+
+### Authoring conventions
+
+- Every MDX file requires Starlight frontmatter: `title` and `description`.
+- All fenced code blocks must use a long-form language identifier: only `typescript` or `bash`.
+- Examples must import from `@tde.io/plexis` and use only symbols exported from `packages/plexis/src/types.ts`.
+- Concepts defer signatures/mechanics to Reference or Pattern links.
+- Patterns are self-contained (no cross-page setup dependencies) and open with a runnable example.
+- Advanced pages are self-contained worked examples whose hero is a scenario to build.
+- Integrations are scoped to a named third-party target (not runtime properties like "serverless").
 
 ---
 
@@ -146,7 +188,7 @@ dist/                           # Build output (gitignored)
 
 The unit the SOLID skill should reason about in Plexis is **the exported function, class, or factory from a `src/core/` or `src/graph/` module**.
 
-- **Authoring API surface** — `defineDomain`, `definePipeline`, `createTracer` factories plus `state`, `edge`, `node`, `fork`, `terminal` registration helpers. Each is a single-purpose exported function.
+- **Authoring API surface** — `defineDomain`, `definePipeline`, `createTracer` factories plus `when`, `enter`, `exit`, `on`, `node`, `action`, `fork`, `terminal` registration helpers. Each is a single-purpose exported function.
 - **Class constructors** — `Domain`, `Pipeline`, `Tracer`, `PlexisError`. Each satisfies the interface declared in `src/types.ts` and routes through the same internal builder (`buildDomain`, `buildPipeline`) as its factory.
 - **Pure utility modules** — `src/graph/descriptor.js`, `src/graph/paths.js`, `src/graph/inspection.js`, `src/core/context.js`. No state, no side effects, accept input and return output.
 - **Interface contract** — `src/types.ts` declares `Domain<TContext, TEdges>`, `Pipeline<TContext>`, `Tracer`, plus all `*Def` / `*Config` shapes. **Class instances must satisfy these interfaces.** New methods or properties added to a class without updating `src/types.ts` are a SOLID violation (LSP — substitutability is broken if the published type doesn't reflect the runtime shape).
@@ -168,7 +210,7 @@ The unit the SOLID skill should reason about in Plexis is **the exported functio
 ### Project-specific exceptions and reminders
 
 - **`src/types.ts` is authoritative.** Any drift between a class's public surface and the corresponding interface in `src/types.ts` is treated as a violation. Update the type, not just the implementation.
-- **Setup-function helpers (`state`, `edge`, `node`, `fork`, `terminal`) read a module-level scope cell.** This is intentional — the spec mandates it. Do NOT flag the module-level state as a SOLID violation; it's the documented mechanism for the composable authoring API.
+- **Setup-function helpers (`when`, `enter`, `exit`, `on`, `node`, `action`, `fork`, `terminal`) use a nested builder-scope stack.** This is intentional — the spec mandates it. Do NOT flag the module-level scope stack as a SOLID violation; it's the documented mechanism for the composable authoring API.
 - **`PlexisError` static factory helpers** (`PlexisError.unknownEvent(...)` etc.) are intentional — they encapsulate the construction of typed errors. Do NOT flag this pattern as a god class; each factory has one responsibility (one error code).
 - **OpenSpec artifacts in `openspec/changes/**` are NOT code.** They are project planning documents and are exempt from all SOLID/code-style rules.
 - **`.specs/plexis/` is a read-only reference implementation** of the older options-based API. It is not the target and its code style is not authoritative — do not propagate patterns from it into `src/`.
@@ -190,5 +232,5 @@ Reading the skill against this config:
 | **SRP** | One file per primitive (`domain.js`, `pipeline.js`, `tracer.js`, `errors.js`, `context.js`, `helpers.js`). One reason to change per file. Functions named `handleXAndY` still split. Modules ≤ ~300 lines (libraries can be denser than UI components; ~150 is too tight). |
 | **OCP** | Extend via options/strategy injection (custom `merge`, custom `idFactory`, custom `clock`, custom `errorPolicy`) — not by editing `Domain.follow`. New error codes added via static factories on `PlexisError`, not by patching every throw site. |
 | **LSP** | Class instances must satisfy `src/types.ts` interfaces exactly. `new Domain(...)` and `defineDomain(...)` must produce instances that behave identically — covered by parity tests. |
-| **ISP** | `*Def` / `*Config` interfaces should be focused. Don't expand `EdgeDef` with fields only some edges use — add a separate concern. Don't pass a god `Options` bag where a focused one would do. |
+| **ISP** | `*Def` / `*Config` interfaces should be focused. Don't expand `OnDef` with fields only some flows use — add a separate concern. Don't pass a god `Options` bag where a focused one would do. |
 | **DIP** | Inject `Tracer`, `merge`, `idFactory`, `clock` rather than calling them directly. Tests substitute fakes through the same injection points. |

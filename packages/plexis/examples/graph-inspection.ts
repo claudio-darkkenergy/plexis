@@ -8,14 +8,17 @@
 import {
   defineDomain,
   definePipeline,
-  state,
-  edge,
+  when,
+  on,
+  target,
+  pipeline,
   node,
+  action,
   fork,
   terminal,
 } from '../src/index.js';
 
-// ─── Payment pipeline (same scenario as payment-pipeline.ts) ─────────────────
+// ─── Payment pipeline ─────────────────────────────────────────────────────────
 
 interface PayCtx {
   cardNumber?: string;
@@ -26,41 +29,40 @@ interface PayCtx {
 }
 
 const paymentPipeline = definePipeline<PayCtx>('payment', () => {
-  node('validate-card', {
-    action: async (ctx) => ({ cardValid: ctx.cardNumber?.startsWith('4') }),
-    forks: [
-      fork((ctx) => ctx.cardValid === true, 'fraud-check', { label: 'card-ok' }),
-      fork(undefined, 'decline', { label: 'card-invalid' }),
-    ],
+  node('validate-card', () => {
+    action(async (ctx: PayCtx) => ({ cardValid: ctx.cardNumber?.startsWith('4') }));
+    fork('card-ok', target('fraud-check'), (ctx: PayCtx) => ctx.cardValid === true);
+    fork('card-invalid', target('decline'));
   });
 
-  node('fraud-check', {
-    action: async () => ({ fraudScore: 0.12 }),
-    forks: [
-      fork((ctx) => (ctx.fraudScore ?? 0) > 0.5, 'manual-review', { label: 'high-risk' }),
-      fork(undefined, 'charge', { label: 'low-risk' }),
-    ],
+  node('fraud-check', () => {
+    action(async () => ({ fraudScore: 0.12 }));
+    fork('high-risk', target('manual-review'), (ctx: PayCtx) => (ctx.fraudScore ?? 0) > 0.5);
+    fork('low-risk', target('charge'));
   });
 
-  node('charge', terminal({ action: async () => ({ charged: true }) }));
-  node('manual-review', terminal({ action: async () => ({ reviewRequired: true }) }));
-  node('decline', terminal({ action: async () => ({ charged: false }) }));
+  node('charge', terminal(async () => ({ charged: true })));
+  node('manual-review', terminal(async () => ({ reviewRequired: true })));
+  node('decline', terminal(async () => ({ charged: false })));
 
   return { initial: 'validate-card' };
 });
 
-// ─── Order domain (same scenario as order-domain.ts) ─────────────────────────
+// ─── Order domain ─────────────────────────────────────────────────────────────
 
 interface OrderCtx { orderId?: string }
 
 const orderDomain = defineDomain<OrderCtx>('order', () => {
-  state('pending', {
-    edges: {
-      SUBMIT: edge({ target: 'processing', pipeline: paymentPipeline }),
-    },
+  when('pending', () => {
+    on('submit', () => {
+      pipeline(paymentPipeline);
+      return target('processing');
+    });
   });
-  state('processing', { edges: { COMPLETE: edge({ target: 'done' }) } });
-  state('done', { terminal: true, edges: {} });
+  when('processing', () => {
+    on('complete', target('done'));
+  });
+  when('done', terminal());
 
   return { context: { orderId: 'ORD-001' }, initial: 'pending', strict: true };
 });

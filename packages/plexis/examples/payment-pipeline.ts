@@ -2,12 +2,12 @@
  * Payment Pipeline Example
  *
  * Standalone pipeline with branching logic using the composable API.
- * Demonstrates: definePipeline, node, fork, terminal, createTracer, run, trace.
+ * Demonstrates: definePipeline, node, action, fork, target, terminal, createTracer, run, trace.
  *
  * Flow: validate-card → (card-ok) fraud-check → (low-risk) charge
  *                    ↘ (card-invalid) decline    ↘ (high-risk) manual-review
  */
-import { definePipeline, node, fork, terminal, createTracer } from '../src/index.js';
+import { definePipeline, node, action, fork, target, terminal, createTracer } from '../src/index.js';
 
 interface PaymentCtx {
   cardNumber: string;
@@ -21,35 +21,21 @@ interface PaymentCtx {
 const tracer = createTracer({ captureContext: 'after' });
 
 const paymentPipeline = definePipeline<PaymentCtx>('payment', () => {
-  node('validate-card', {
-    action: async (ctx) => ({
-      cardValid: ctx.cardNumber.startsWith('4'),
-    }),
-    forks: [
-      fork((ctx) => ctx.cardValid === true, 'fraud-check', { label: 'card-ok' }),
-      fork(undefined, 'decline', { label: 'card-invalid' }),
-    ],
+  node('validate-card', () => {
+    action(async (ctx: PaymentCtx) => ({ cardValid: ctx.cardNumber.startsWith('4') }));
+    fork('card-ok', target('fraud-check'), (ctx: PaymentCtx) => ctx.cardValid === true);
+    fork('card-invalid', target('decline'));
   });
 
-  node('fraud-check', {
-    action: async () => ({ fraudScore: 0.12 }),
-    forks: [
-      fork((ctx) => (ctx.fraudScore ?? 0) > 0.5, 'manual-review', { label: 'high-risk' }),
-      fork(undefined, 'charge', { label: 'low-risk' }),
-    ],
+  node('fraud-check', () => {
+    action(async () => ({ fraudScore: 0.12 }));
+    fork('high-risk', target('manual-review'), (ctx: PaymentCtx) => (ctx.fraudScore ?? 0) > 0.5);
+    fork('low-risk', target('charge'));
   });
 
-  node('charge', terminal({
-    action: async () => ({ charged: true, txId: 'tx_123' }),
-  }));
-
-  node('manual-review', terminal({
-    action: async () => ({ reviewRequired: true }),
-  }));
-
-  node('decline', terminal({
-    action: async () => ({ charged: false }),
-  }));
+  node('charge', terminal(async () => ({ charged: true })));
+  node('manual-review', terminal(async () => ({ reviewRequired: true })));
+  node('decline', terminal(async () => ({ charged: false })));
 
   return { initial: 'validate-card' };
 }, { tracer });

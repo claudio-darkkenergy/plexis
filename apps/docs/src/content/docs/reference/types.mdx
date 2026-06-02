@@ -1,0 +1,319 @@
+---
+title: Key Types
+description: Reference for DomainFollowResult, PipelineRunResult, DomainSnapshot, DomainHistoryEntry, NodeInspection, GraphDescriptor, PatchLike, ErrorPolicy, TraceEvent, TraceLevel, and TraceStatus.
+---
+
+These types appear in return values and handler signatures throughout the library.
+
+## `DomainFollowResult`
+
+Return value of `domain.follow()` and `domain.followFrom()`.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `status` | `'followed' \| 'blocked' \| 'ignored' \| 'error'` | Yes | `'followed'` — transition completed; `'blocked'` — guard returned false; `'ignored'` — no matching edge and `strict` is false; `'error'` — a handler threw |
+| `event` | `string` | Yes | The event name that was processed |
+| `from` | `string` | Yes | State ID before the transition |
+| `to` | `string` | No | State ID after the transition; present when `status` is `'followed'` |
+| `context` | `TContext` | Yes | Context after the transition |
+| `traceId` | `string` | Yes | Trace ID for this transition |
+| `error` | `unknown` | No | Error thrown by a handler; present when `status` is `'error'` |
+
+### Example
+
+```typescript
+const result = await order.follow('submit');
+
+if (result.status === 'followed') {
+  console.log(`Moved from ${result.from} → ${result.to}`);
+} else if (result.status === 'blocked') {
+  console.log('Guard prevented the transition');
+} else if (result.status === 'error') {
+  console.error('Handler threw:', result.error);
+}
+```
+
+---
+
+## `PipelineRunResult`
+
+Return value of `pipeline.run()`.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `status` | `'completed' \| 'stopped' \| 'error'` | Yes | `'completed'` — reached a terminal node; `'stopped'` — no matching fork and node is not terminal; `'error'` — a handler threw |
+| `pipelineId` | `string` | Yes | ID of the pipeline |
+| `finalNode` | `string` | Yes | ID of the last node reached |
+| `context` | `TContext` | Yes | Context after the run |
+| `traceId` | `string` | Yes | Trace ID for this run |
+| `localTrace` | `TraceEvent[]` | Yes | All trace events recorded during this run |
+| `error` | `unknown` | No | Error thrown by a handler; present when `status` is `'error'` |
+
+### Example
+
+```typescript
+const result = await payment.run({ validated: false, charged: false });
+
+if (result.status === 'completed') {
+  console.log('Finished at node:', result.finalNode);
+  console.log('Final context:', result.context);
+} else if (result.status === 'error') {
+  console.error('Pipeline error:', result.error);
+}
+```
+
+---
+
+## `DomainSnapshot`
+
+Captured by `domain.snapshot()`; restored via `domain.restore(snapshot)`.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `state` | `string` | Yes | Current state ID at snapshot time |
+| `context` | `TContext` | Yes | Context at snapshot time |
+| `historyLength` | `number` | Yes | Number of recorded history entries at snapshot time |
+
+### Example
+
+```typescript
+const snap = order.snapshot();
+// { state: 'pending', context: { orderId: 'o1' }, historyLength: 0 }
+
+await order.follow('submit');
+order.restore(snap); // rolls back to 'pending'
+```
+
+---
+
+## `DomainHistoryEntry`
+
+Single transition record returned by `domain.history()`.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `from` | `string` | Yes | State before the transition |
+| `to` | `string` | Yes | State after the transition |
+| `event` | `string` | Yes | Event name that triggered the transition |
+| `payload` | `unknown` | No | Optional event payload |
+| `context` | `TContext` | Yes | Context after the transition |
+| `timestamp` | `number` | Yes | Timestamp of the transition |
+| `traceId` | `string` | Yes | Trace ID for this transition |
+
+### Example
+
+```typescript
+await order.follow('submit', { userId: 'u1' });
+
+const [entry] = order.history();
+console.log(entry.from);    // 'pending'
+console.log(entry.to);      // 'processing'
+console.log(entry.event);   // 'submit'
+console.log(entry.payload); // { userId: 'u1' }
+```
+
+---
+
+## `NodeInspection`
+
+Return value of `domain.inspectNode()` and `pipeline.inspectNode()`.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `node` | `GraphNode` | Yes | The inspected node |
+| `inbound` | `GraphEdge[]` | Yes | All edges pointing to this node |
+| `outbound` | `GraphEdge[]` | Yes | All edges pointing from this node |
+| `pathsTo` | `GraphPath[]` | Yes | All paths leading to this node |
+| `pathsFrom` | `GraphPath[]` | Yes | All paths starting from this node |
+| `reachableNodes` | `GraphNode[]` | Yes | All nodes reachable from this node |
+| `attachedPipelines` | `GraphAttachment[]` | Yes | Pipelines attached to this node |
+| `runtimeStats` | `object` | No | Runtime statistics; populated after the node has been visited |
+
+`runtimeStats` fields:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `visits` | `number` | Yes | Number of times this node has been visited |
+| `lastVisitedAt` | `number` | No | Timestamp of the most recent visit |
+| `observedLabels` | `string[]` | Yes | Fork labels selected at this node across all visits |
+| `recentTraceIds` | `string[]` | Yes | Trace IDs of recent visits |
+
+### Example
+
+```typescript
+const info = order.inspectNode('pending');
+console.log(info.outbound.map((e) => e.event)); // ['submit']
+console.log(info.reachableNodes.map((n) => n.id)); // ['processing']
+```
+
+---
+
+## `GraphDescriptor`
+
+Static graph representation returned by `describe()` and graph query methods.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes | Domain or pipeline ID |
+| `kind` | `'domain' \| 'pipeline' \| 'composed'` | Yes | Whether this describes a domain, pipeline, or composed graph |
+| `nodes` | `GraphNode[]` | Yes | All nodes in the graph |
+| `edges` | `GraphEdge[]` | Yes | All edges in the graph |
+| `entryNodes` | `GraphNodeRef[]` | Yes | References to entry (initial) nodes |
+| `terminalNodes` | `GraphNodeRef[]` | Yes | References to terminal nodes |
+| `attachments` | `GraphAttachment[]` | Yes | All pipeline attachments |
+
+### Example
+
+```typescript
+const descriptor = order.describe();
+console.log(descriptor.kind);  // 'domain'
+console.log(descriptor.nodes.map((n) => n.id));    // all state IDs
+console.log(descriptor.edges.map((e) => e.event)); // all event names
+```
+
+---
+
+## `PatchLike`
+
+The type a handler may return to patch context.
+
+```typescript
+type PatchLike<TContext> = Partial<TContext> | void | null | undefined
+```
+
+Return a `Partial<TContext>` to merge changes into the context. Return `void`, `null`, or `undefined` for no change. The default merge strategy is a shallow spread: `{ ...prev, ...patch }`.
+
+### Example
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+type Ctx = { count: number };
+
+const counter = defineDomain<Ctx>('counter', () => {
+  when('active', () => {
+    on('increment', () => {
+      action((ctx) => ({ count: ctx.count + 1 }));
+      return target('active');
+    });
+    on('noop', () => {
+      action(() => undefined); // returns void — no context change
+      return target('active');
+    });
+  });
+  return { context: { count: 0 }, initial: 'active' };
+});
+```
+
+---
+
+## `ErrorPolicy`
+
+```typescript
+type ErrorPolicy = 'throw' | 'return' | 'trace-and-return'
+```
+
+| Value | Description |
+| --- | --- |
+| `'throw'` | Re-throw the error; the caller receives a rejected promise |
+| `'return'` | Return a result with `status: 'error'` instead of throwing |
+| `'trace-and-return'` | Record the error in the trace and return `status: 'error'` |
+
+### Example
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+const domain = defineDomain(
+  'order',
+  () => {
+    when('active', () => {});
+    return { context: {}, initial: 'active', errorPolicy: 'return' };
+  }
+);
+
+const result = await domain.follow('fail');
+console.log(result.status); // 'error' — did not throw
+```
+
+---
+
+## `TraceEvent`
+
+Single recorded trace event returned by `tracer.history()` and `tracer.byTraceId()`.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes | Unique event ID |
+| `traceId` | `string` | Yes | Trace ID grouping related events |
+| `parentId` | `string` | No | Parent event ID for nested events |
+| `timestamp` | `number` | Yes | Timestamp |
+| `level` | `TraceLevel` | Yes | Event level |
+| `type` | `string` | Yes | Event type string |
+| `domainId` | `string` | No | Domain context |
+| `pipelineId` | `string` | No | Pipeline context |
+| `nodeId` | `string` | No | Node context |
+| `stateId` | `string` | No | State context |
+| `event` | `string` | No | Event name (for domain events) |
+| `label` | `string` | No | Human-readable label |
+| `from` | `string` | No | Source state or node |
+| `to` | `string` | No | Target state or node |
+| `status` | `TraceStatus` | No | Event status |
+| `input` | `unknown` | No | Input to the handler |
+| `outputPatch` | `unknown` | No | Patch returned by the handler |
+| `contextSnapshot` | `unknown` | No | Context snapshot (when `captureContext` is enabled) |
+| `error` | `unknown` | No | Error if the handler threw |
+| `metadata` | `Record<string, unknown>` | No | User-defined metadata |
+
+### Example
+
+```typescript
+import { createTracer, defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+const tracer = createTracer({ captureContext: 'after' });
+const domain = defineDomain('order', () => {
+  when('pending', () => {
+    on('submit', target('done'));
+  });
+  when('done', terminal());
+  return { context: {}, initial: 'pending' };
+}, { tracer });
+
+await domain.follow('submit');
+
+const events = tracer.history();
+events.forEach((e) => {
+  console.log(e.type, e.level, e.status);
+});
+```
+
+---
+
+## `TraceLevel`
+
+`'domain'` \| `'state'` \| `'edge'` \| `'pipeline'` \| `'pipeline-node'` \| `'fork'` \| `'action'` \| `'guard'` \| `'condition'`
+
+### Example
+
+```typescript
+import type { TraceLevel } from '@tde.io/plexis';
+
+const level: TraceLevel = 'edge'; // valid level
+```
+
+---
+
+## `TraceStatus`
+
+`'started'` \| `'completed'` \| `'blocked'` \| `'selected'` \| `'skipped'` \| `'failed'`
+
+### Example
+
+```typescript
+import { createTracer } from '@tde.io/plexis';
+import type { TraceStatus } from '@tde.io/plexis';
+
+const tracer = createTracer();
+// After running a domain or pipeline:
+const failed = tracer.history().filter((e) => e.status === ('failed' as TraceStatus));
+```

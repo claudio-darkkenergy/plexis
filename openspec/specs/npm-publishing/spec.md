@@ -4,10 +4,10 @@
 
 ### Requirement: Scoped npm package name
 
-The package SHALL be published to npm under the scoped name `@tde.io/plexis`. The `name` field in `package.json` MUST equal `@tde.io/plexis` exactly.
+The package SHALL be published to npm under the scoped name `@tde.io/plexis`. The `name` field in `packages/plexis/package.json` MUST equal `@tde.io/plexis` exactly.
 
 #### Scenario: Package name is the scoped form
-- **WHEN** a developer inspects `package.json`
+- **WHEN** a developer inspects `packages/plexis/package.json`
 - **THEN** the `name` field equals `@tde.io/plexis`
 
 #### Scenario: Unscoped name is not published
@@ -16,10 +16,10 @@ The package SHALL be published to npm under the scoped name `@tde.io/plexis`. Th
 
 ### Requirement: Public access for scoped package
 
-The package SHALL be configured to publish with public access so that the scoped name is installable without authentication. The `publishConfig.access` field in `package.json` MUST equal `"public"`.
+The package SHALL be configured to publish with public access so that the scoped name is installable without authentication. The `publishConfig.access` field in `packages/plexis/package.json` MUST equal `"public"`.
 
 #### Scenario: publishConfig is set
-- **WHEN** a developer inspects `package.json`
+- **WHEN** a developer inspects `packages/plexis/package.json`
 - **THEN** `publishConfig.access` equals `"public"`
 
 #### Scenario: A bare publish defaults to public
@@ -28,15 +28,16 @@ The package SHALL be configured to publish with public access so that the scoped
 
 ### Requirement: Files allowlist restricts the published tarball
 
-The published npm tarball SHALL include only the build outputs, source, and README. The `files` field in `package.json` MUST list exactly: `dist`, `src`, and `README.md`. The tarball MUST NOT contain test files, internal docs, example apps, OpenSpec changes, or workflow configuration.
+The published npm tarball SHALL include only the build outputs, source, and README. The `files` field in `packages/plexis/package.json` MUST list exactly: `dist`, `src`, and `README.md`. The tarball MUST NOT contain test files, internal docs, example apps, OpenSpec changes, or workflow configuration. Paths in the `files` field are resolved relative to the package directory (`packages/plexis/`), so the included `README.md` is `packages/plexis/README.md`.
 
 #### Scenario: Tarball contains dist, src, and README
-- **WHEN** `pnpm pack --dry-run` is executed
-- **THEN** the listed files include the `dist/` tree, the `src/` tree, and `README.md`
+- **WHEN** `pnpm pack --dry-run` is executed inside `packages/plexis/`
+- **THEN** the listed files include the `dist/` tree, the `src/` tree, and `README.md` (resolved from `packages/plexis/README.md`)
 
 #### Scenario: Tarball excludes test and tooling files
-- **WHEN** `pnpm pack --dry-run` is executed
-- **THEN** no files under `openspec/`, `.github/`, `examples/`, or `**/*.test.ts` appear in the listing
+- **WHEN** `pnpm pack --dry-run` is executed inside `packages/plexis/`
+- **THEN** no files under `openspec/`, `.github/`, `examples/`, `tests/`, or `**/*.test.ts` appear in the listing
+- **AND** no files outside `packages/plexis/` appear in the listing
 
 ### Requirement: Package entrypoints reference built artifacts
 
@@ -72,48 +73,73 @@ Publication SHALL be triggered exclusively by pushing a git tag matching the pat
 
 ### Requirement: Tag version must match package.json version
 
-The publish workflow SHALL verify that the git tag name (minus the leading `v`) equals the `version` field in `package.json` before invoking `npm publish`. A mismatch MUST fail the workflow before any publish step runs.
+The publish workflow SHALL verify that the git tag name (minus the leading `v`) equals the `version` field in `packages/plexis/package.json` before invoking `pnpm publish`. A mismatch MUST fail the workflow before any publish step runs.
 
 #### Scenario: Tag and version agree
 - **WHEN** the workflow runs for tag `v1.2.3`
-- **AND** `package.json` has `"version": "1.2.3"`
+- **AND** `packages/plexis/package.json` has `"version": "1.2.3"`
 - **THEN** the verification step passes and publish proceeds
 
 #### Scenario: Tag and version disagree
 - **WHEN** the workflow runs for tag `v1.2.3`
-- **AND** `package.json` has `"version": "1.2.2"`
+- **AND** `packages/plexis/package.json` has `"version": "1.2.2"`
 - **THEN** the verification step fails with a non-zero exit code
 - **AND** `pnpm publish` is not invoked
 
+#### Scenario: Verification reads the package manifest, not the root manifest
+
+- **WHEN** the publish workflow's version-check step runs
+- **THEN** it reads the `version` field from `packages/plexis/package.json` (e.g., `node -p "require('./packages/plexis/package.json').version"`)
+- **AND** it does NOT read the root `package.json` for the version
+
 ### Requirement: Publish uses the build artifact, not a fresh local build
 
-The publish workflow SHALL download the `dist/` artifact produced by the build workflow for the same commit SHA and publish that exact directory. The publish workflow MUST NOT run `pnpm build` itself.
+The `publish` job SHALL download the `plexis-dist` artifact produced by the `build` job in the same workflow run, restore it to `packages/plexis/dist/`, and publish that exact directory. The `publish` job MUST NOT run `pnpm build` itself.
 
-#### Scenario: Publish downloads the build artifact
-- **WHEN** the publish workflow runs
-- **THEN** it downloads the artifact named `plexis-dist` produced by the build workflow run keyed to the tagged commit
+#### Scenario: Publish downloads the build artifact to the package path
+
+- **WHEN** the `publish` job runs
+- **THEN** it downloads the artifact named `plexis-dist` produced by the `build` job
+- **AND** the artifact contents are restored to `packages/plexis/dist/`
 
 #### Scenario: Publish does not rebuild
-- **WHEN** the publish workflow runs
+
+- **WHEN** the `publish` job runs
 - **THEN** no step invokes `pnpm build`, `tsc`, or `rolldown`
 
 ### Requirement: Publish is gated on build and test success
 
-The publish workflow SHALL refuse to publish unless both the build workflow and the test workflow have completed successfully for the tagged commit SHA. A failed or in-progress build or test MUST prevent the publish step from running.
+The `publish` job SHALL only run after the `build` and `test` jobs have both succeeded in the same workflow run. A failed `build` or `test` job MUST prevent the `publish` job from running.
 
-#### Scenario: Both gates pass
-- **WHEN** build and test have both concluded with `success` for the tagged commit SHA
-- **THEN** the publish workflow proceeds to `pnpm publish`
+#### Scenario: Both jobs pass
 
-#### Scenario: Build failed
-- **WHEN** the build workflow for the tagged commit concluded with `failure`
-- **THEN** the publish workflow does not run `pnpm publish`
-- **AND** the publish workflow is marked failed
+- **WHEN** the `build` and `test` jobs both conclude with `success`
+- **THEN** the `publish` job starts and proceeds to `pnpm publish`
 
-#### Scenario: Test failed
-- **WHEN** the test workflow for the tagged commit concluded with `failure`
-- **THEN** the publish workflow does not run `pnpm publish`
-- **AND** the publish workflow is marked failed
+#### Scenario: Build job failed
+
+- **WHEN** the `build` job fails
+- **THEN** the `publish` job does not run
+
+#### Scenario: Test job failed
+
+- **WHEN** the `test` job fails
+- **THEN** the `publish` job does not run
+
+### Requirement: Publish runs from the library package directory
+
+The `publish` job's `pnpm publish` invocation SHALL execute with the working directory set to `packages/plexis/` so that pnpm resolves the package's own `package.json` and its `files` allowlist. Running `pnpm publish` from the repository root MUST NOT be used as the publish step.
+
+#### Scenario: Publish step uses working-directory
+
+- **WHEN** a maintainer inspects the workflow YAML
+- **THEN** the step that runs `pnpm publish` declares `working-directory: packages/plexis` (or runs `cd packages/plexis &&` before `pnpm publish`)
+
+#### Scenario: pnpm publish resolves the library manifest
+
+- **WHEN** the `publish` job runs the publish step
+- **THEN** the resolved manifest is `packages/plexis/package.json` (name `@tde.io/plexis`)
+- **AND** the resulting tarball is the one defined by that manifest's `files` allowlist
 
 ### Requirement: Authentication uses OIDC with npm provenance
 

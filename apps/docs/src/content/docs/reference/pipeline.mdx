@@ -1,0 +1,174 @@
+---
+title: Pipeline Instance
+description: Reference for Pipeline instance members, the PipelineGraph query API, and PathQueryOptions.
+---
+
+`Pipeline` — returned by `definePipeline()`. Represents a finite, single-run workflow that executes nodes in order, following fork conditions until a terminal node is reached.
+
+## Properties
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `id` | `string` | Pipeline identifier |
+| `graph` | `PipelineGraph` | Graph query API; see [PipelineGraph methods](#pipelinegraph-methods) |
+
+---
+
+## `pipeline.run(context, input?)`
+
+Execute the pipeline from its initial node.
+
+### Parameters
+
+**`context`** `TContext`
+
+Initial context. Merged with patches as nodes execute.
+
+**`input`** `unknown` *(optional)*
+
+Arbitrary value passed to each node's action and fork conditions via `PipelineActionInput.input` and `PipelineConditionInput.input`.
+
+### Return value
+
+`Promise<PipelineRunResult<TContext>>` — see [PipelineRunResult](/reference/types#pipelinerunresult).
+
+### Example
+
+```typescript
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
+
+type Ctx = { validated: boolean; charged: boolean };
+
+const payment = definePipeline<Ctx>('payment', () => {
+  node('validate', () => {
+    action(async (ctx) => ({ validated: true }));
+    fork('charge', target('charge'), (ctx) => ctx.validated);
+    fork('decline', target('decline'));
+  });
+  node('charge', terminal(async () => ({ charged: true })));
+  node('decline', terminal());
+  return { initial: 'validate' };
+});
+
+const result = await payment.run({ validated: false, charged: false });
+console.log(result.status);    // 'completed'
+console.log(result.finalNode); // 'charge'
+console.log(result.context.charged); // true
+```
+
+---
+
+## `pipeline.describe()`
+
+Return a static graph descriptor.
+
+### Return value
+
+`GraphDescriptor` — see [GraphDescriptor](/reference/types#graphdescriptor).
+
+### Example
+
+```typescript
+const descriptor = payment.describe();
+console.log(descriptor.nodes.map((n) => n.id)); // ['validate', 'charge', 'decline']
+```
+
+---
+
+## `pipeline.trace(format?)`
+
+Export trace data for this pipeline.
+
+### Parameters
+
+**`format`** `'json' | 'text' | 'tree'` *(optional)*
+
+Export format.
+
+### Return value
+
+`unknown`
+
+### Example
+
+```typescript
+const tree = payment.trace('tree');
+const json = payment.trace('json');
+```
+
+---
+
+## `pipeline.inspectNode(node, options?)`
+
+Inspect a node's paths.
+
+### Parameters
+
+**`node`** `string | GraphNodeRef`
+
+Node ID or graph node reference.
+
+**`options`** `PathQueryOptions` *(optional)*
+
+See [PathQueryOptions](#pathqueryoptions) below.
+
+### Return value
+
+`NodeInspection` — see [NodeInspection](/reference/types#nodeinspection).
+
+### Example
+
+```typescript
+const info = payment.inspectNode('validate');
+console.log(info.outbound.length);   // edges from 'validate'
+console.log(info.pathsFrom.length);  // paths reachable from 'validate'
+```
+
+---
+
+## `PipelineGraph` methods
+
+Accessed via `pipeline.graph`.
+
+| Method | Parameters | Returns | Description |
+| --- | --- | --- | --- |
+| `describe()` | — | `GraphDescriptor` | Static graph descriptor for this pipeline |
+| `node(id)` | `id: string` | `GraphNode \| undefined` | Look up a graph node by ID |
+| `inbound(id)` | `id: string` | `GraphEdge[]` | All edges pointing to the given node |
+| `outbound(id)` | `id: string` | `GraphEdge[]` | All edges pointing from the given node |
+| `pathsTo(id, options?)` | `id: string, options?: PathQueryOptions` | `GraphPath[]` | All paths leading to the given node |
+| `pathsFrom(id, options?)` | `id: string, options?: PathQueryOptions` | `GraphPath[]` | All paths starting from the given node |
+| `reachableFrom(id, options?)` | `id: string, options?: PathQueryOptions` | `GraphNode[]` | All nodes reachable from the given node |
+
+### Example
+
+```typescript
+const graph = payment.graph;
+
+const node = graph.node('validate');
+const outgoing = graph.outbound('validate');
+const reachable = graph.reachableFrom('validate');
+const paths = graph.pathsTo('charge');
+```
+
+---
+
+## `PathQueryOptions`
+
+Used by `inspectNode()` and the graph query methods to control traversal behavior.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `maxDepth` | `number` | No | Maximum path depth to traverse |
+| `includeCycles` | `boolean` | No | When `true`, cyclic paths are included in results |
+| `includeCrossBoundary` | `boolean` | No | When `true`, paths crossing domain/pipeline boundaries are included |
+| `direction` | `'inbound' \| 'outbound'` | No | Traversal direction for reachability queries |
+
+### Example
+
+```typescript
+const paths = payment.graph.pathsFrom('validate', {
+  maxDepth: 5,
+  includeCycles: false,
+});
+```

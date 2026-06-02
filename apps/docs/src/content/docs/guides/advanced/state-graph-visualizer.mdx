@@ -1,0 +1,184 @@
+---
+title: State Graph Visualizer
+description: Transform a GraphDescriptor from domain.graph or pipeline.graph into a Mermaid or DOT diagram you can render in a browser or CI pipeline.
+---
+
+`domain.graph.describe()` and `pipeline.graph.describe()` return a `GraphDescriptor` — a static, serializable description of every node, edge, entry point, and terminal in the graph. This guide shows how to transform that descriptor into a Mermaid state diagram and a Graphviz DOT diagram.
+
+If you are new to reading the graph API, start with [Graph Introspection](/patterns/graph-introspection) in Patterns.
+
+## Reading the descriptor
+
+```typescript
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+
+const order = defineDomain('order', () => {
+  when('pending', () => {
+    on('submit', target('processing'));
+  });
+  when('processing', () => {
+    on('fulfill', target('fulfilled'));
+    on('cancel', target('cancelled'));
+  });
+  when('fulfilled', terminal());
+  when('cancelled', terminal());
+  return { context: {}, initial: 'pending' };
+});
+
+const descriptor = order.graph.describe();
+// {
+//   id: 'order', kind: 'domain',
+//   nodes: [...], edges: [...],
+//   entryNodes: [...], terminalNodes: [...], attachments: []
+// }
+```
+
+## Generating a Mermaid state diagram
+
+Mermaid's `stateDiagram-v2` format maps cleanly to a domain's nodes and edges.
+
+```typescript
+import type { GraphDescriptor } from '@tde.io/plexis';
+
+function toMermaid(descriptor: GraphDescriptor): string {
+  const lines: string[] = ['stateDiagram-v2'];
+
+  // Mark entry nodes
+  for (const entry of descriptor.entryNodes) {
+    if (entry.nodeId) {
+      lines.push(`  [*] --> ${entry.nodeId}`);
+    }
+  }
+
+  // Map edges — use event label when available, fall back to edge kind
+  for (const edge of descriptor.edges) {
+    const from = edge.from.nodeId ?? edge.from.edgeId ?? '?';
+    const to = edge.to.nodeId ?? edge.to.edgeId ?? '?';
+    const label = edge.event ?? edge.label ?? edge.kind;
+    lines.push(`  ${from} --> ${to} : ${label}`);
+  }
+
+  // Mark terminal nodes
+  for (const terminal of descriptor.terminalNodes) {
+    if (terminal.nodeId) {
+      lines.push(`  ${terminal.nodeId} --> [*]`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+const mermaid = toMermaid(descriptor);
+// stateDiagram-v2
+//   [*] --> pending
+//   pending --> processing : submit
+//   processing --> fulfilled : fulfill
+//   processing --> cancelled : cancel
+//   fulfilled --> [*]
+//   cancelled --> [*]
+```
+
+Paste the output into [mermaid.live](https://mermaid.live) or include it in a Markdown file with a `mermaid` fence to render it.
+
+## Generating a Graphviz DOT diagram
+
+DOT format gives you more layout control and works with Graphviz and tools like `d3-graphviz`.
+
+```typescript
+import type { GraphDescriptor } from '@tde.io/plexis';
+
+function toDot(descriptor: GraphDescriptor): string {
+  const terminalIds = new Set(descriptor.terminalNodes.map((n) => n.nodeId).filter(Boolean));
+  const entryIds = new Set(descriptor.entryNodes.map((n) => n.nodeId).filter(Boolean));
+
+  const lines: string[] = [`digraph ${descriptor.id} {`];
+  lines.push('  rankdir=LR;');
+  lines.push('  node [shape=circle];');
+
+  // Node declarations with shape overrides
+  for (const node of descriptor.nodes) {
+    const shape = terminalIds.has(node.id)
+      ? 'doublecircle'
+      : entryIds.has(node.id)
+        ? 'circle'
+        : 'circle';
+    lines.push(`  "${node.id}" [shape=${shape}];`);
+  }
+
+  // Edge declarations
+  for (const edge of descriptor.edges) {
+    const from = edge.from.nodeId ?? edge.from.edgeId ?? '?';
+    const to = edge.to.nodeId ?? edge.to.edgeId ?? '?';
+    const label = edge.event ?? edge.label ?? edge.kind;
+    lines.push(`  "${from}" -> "${to}" [label="${label}"];`);
+  }
+
+  lines.push('}');
+  return lines.join('\n');
+}
+
+const dot = toDot(descriptor);
+// digraph order {
+//   rankdir=LR;
+//   node [shape=circle];
+//   "pending" [shape=circle];
+//   "processing" [shape=circle];
+//   "fulfilled" [shape=doublecircle];
+//   "cancelled" [shape=doublecircle];
+//   "pending" -> "processing" [label="submit"];
+//   "processing" -> "fulfilled" [label="fulfill"];
+//   "processing" -> "cancelled" [label="cancel"];
+// }
+```
+
+## Visualizing a pipeline graph
+
+The same functions work for `pipeline.graph.describe()` — `descriptor.kind` will be `'pipeline'` and nodes will have `kind: 'pipeline-node'`. Fork edges have `kind: 'pipeline-fork'` and carry the fork label.
+
+```typescript
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
+
+const charge = definePipeline('charge', () => {
+  node('validate', () => {
+    fork('charge', target('charge'), (ctx) => ctx.cardValid);
+    fork('decline', target('decline'), (ctx) => !ctx.cardValid);
+  });
+  node('charge', terminal());
+  node('decline', terminal());
+  return { initial: 'validate' };
+});
+
+const pipelineDot = toDot(charge.graph.describe());
+```
+
+## Filtering edge kinds
+
+The `GraphDescriptor` may include edges of various kinds (`'domain-flow'`, `'state-entry-pipeline'`, `'pipeline-fork'`, etc.). Filter to only the edges you want to render:
+
+```typescript
+function toMermaidSimple(descriptor: GraphDescriptor): string {
+  const lines = ['stateDiagram-v2'];
+
+  for (const entry of descriptor.entryNodes) {
+    if (entry.nodeId) lines.push(`  [*] --> ${entry.nodeId}`);
+  }
+
+  // Only render the primary transition edges
+  for (const edge of descriptor.edges.filter(
+    (e) => e.kind === 'domain-flow' || e.kind === 'pipeline-fork'
+  )) {
+    const from = edge.from.nodeId ?? '?';
+    const to = edge.to.nodeId ?? '?';
+    const label = edge.event ?? edge.label ?? '';
+    lines.push(`  ${from} --> ${to} : ${label}`);
+  }
+
+  for (const terminal of descriptor.terminalNodes) {
+    if (terminal.nodeId) lines.push(`  ${terminal.nodeId} --> [*]`);
+  }
+
+  return lines.join('\n');
+}
+```
+
+For the `GraphDescriptor`, `GraphNode`, and `GraphEdge` types, see the [Key Types reference](/reference/types). For the graph query API, see [Graph Introspection](/patterns/graph-introspection) in Patterns.

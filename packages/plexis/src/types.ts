@@ -76,7 +76,7 @@ export type TracerOptions = {
 
 export type GraphNodeKind =
   | 'domain-state'
-  | 'domain-edge'
+  | 'domain-flow'
   | 'pipeline-node'
   | 'pipeline-fork'
   | 'pipeline';
@@ -100,7 +100,7 @@ export type GraphNode = {
 };
 
 export type GraphEdgeKind =
-  | 'domain-edge'
+  | 'domain-flow'
   | 'state-entry-pipeline'
   | 'state-exit-hook'
   | 'state-entry-hook'
@@ -194,21 +194,33 @@ export declare class Tracer implements Tracer {
 
 export declare function createTracer(options?: TracerOptions): Tracer;
 
+// ─── Handler Inputs ──────────────────────────────────────────────────────────
+
+/**
+ * Unified input received by every `action(fn)` handler, regardless of scope.
+ *
+ * Field semantics by scope:
+ * - **`source`**: `nodeId` in a `node` scope; event name in an `on` scope.
+ * - **`scope`**: `pipelineId` in a `node` scope; `whenId` (originating state id) in an `on` scope.
+ * - **`payload`**: pipeline run input in a `node` scope; event payload in an `on` scope. Always present; may be `undefined`.
+ * - **`traceId`**: correlation id for the current trace.
+ */
+export type ActionInput = {
+  source: string;
+  scope: string;
+  payload: unknown;
+  traceId: string;
+};
+
 // ─── Pipeline Runtime Types ─────────────────────────────────────────────────
 
-export type PipelineActionInput = {
-  input?: unknown;
+export type PipelineConditionInput = {
+  payload?: unknown;
   nodeId: string;
   pipelineId: string;
   traceId: string;
 };
 
-export type PipelineConditionInput = {
-  input?: unknown;
-  nodeId: string;
-  pipelineId: string;
-  traceId: string;
-};
 
 export interface Pipeline<TContext extends object = Record<string, unknown>> {
   id: string;
@@ -239,7 +251,7 @@ export type PipelineNodeDef<
 > = {
   action?: (
     ctx: TContext,
-    input: PipelineActionInput
+    input: ActionInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>;
   forks?: PipelineForkDef<TContext>[];
   terminal?: boolean;
@@ -299,49 +311,43 @@ export type GuardInput = {
   traceId: string;
 };
 
-export type TransitionActionInput = {
-  event: string;
-  payload?: unknown;
-  traceId: string;
-};
-
-export type EdgeDef<TContext extends object = Record<string, unknown>> = {
+export type OnDef<TContext extends object = Record<string, unknown>> = {
   target: string;
   guard?: (ctx: TContext, input: GuardInput) => boolean | Promise<boolean>;
   action?: (
     ctx: TContext,
-    input: TransitionActionInput
+    input: ActionInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>;
   pipeline?: Pipeline<TContext>;
   metadata?: Record<string, unknown>;
 };
 
-export type StateNodeDef<TContext extends object = Record<string, unknown>> = {
-  onEnter?: (
+export type WhenDef<TContext extends object = Record<string, unknown>> = {
+  enter?: (
     ctx: TContext,
     input: StateHookInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>;
-  onExit?: (
+  exit?: (
     ctx: TContext,
     input: StateHookInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>;
   pipeline?: Pipeline<TContext>;
-  edges?: Record<string, EdgeDef<TContext>>;
+  on?: Record<string, OnDef<TContext>>;
   terminal?: boolean;
   metadata?: Record<string, unknown>;
 };
 
 export type DomainConfig<
   TContext extends object = Record<string, unknown>,
-  TStates extends Record<string, StateNodeDef<TContext>> = Record<
+  TWhens extends Record<string, WhenDef<TContext>> = Record<
     string,
-    StateNodeDef<TContext>
+    WhenDef<TContext>
   >
 > = {
   context: TContext;
   initial: string;
   strict?: boolean;
-  states: TStates;
+  whens: TWhens;
   errorPolicy?: ErrorPolicy;
   merge?: (
     previous: TContext,
@@ -469,6 +475,37 @@ export type DefinePipelineOptions<
   ) => TContext;
 };
 
+// ─── Target Sentinel ─────────────────────────────────────────────────────────
+
+export type TargetDef =
+  | { __type: 'TargetDef'; id: string }
+  // pipeline: Pipeline<any> — intentional type erasure; the sentinel carries a reference only
+  | { __type: 'TargetDef'; pipeline: Pipeline<any> };
+export type OnSetupFn = () => TargetDef;
+export type OnGuardInput = { event: string; payload?: unknown; traceId: string };
+
+// ─── Error Codes ─────────────────────────────────────────────────────────────
+
+export type PlexisErrorCode =
+  | 'UNKNOWN_EVENT'
+  | 'STATE_MISMATCH'
+  | 'UNKNOWN_INITIAL_STATE'
+  | 'UNKNOWN_INITIAL_NODE'
+  | 'UNKNOWN_TARGET_STATE'
+  | 'UNKNOWN_TARGET_NODE'
+  | 'UNKNOWN_NODE'
+  | 'BUILDER_CLOSED'
+  | 'DUPLICATE_REGISTRATION'
+  | 'MISSING_TARGET'
+  | 'INVALID_TARGET';
+
+// ─── Terminal Sentinel ───────────────────────────────────────────────────────
+
+declare const TERMINAL_BRAND: unique symbol;
+export type TerminalSentinel = { readonly [TERMINAL_BRAND]: true };
+
+// ─── Composable Helper Declarations ─────────────────────────────────────────
+
 export declare function defineDomain<
   TContext extends object,
   TEdges extends string = string
@@ -484,43 +521,78 @@ export declare function definePipeline<TContext extends object>(
   options?: DefinePipelineOptions<TContext>
 ): Pipeline<TContext>;
 
-export declare function state<TContext extends object>(
+export declare function when<TContext extends object>(
   id: string,
-  def: StateNodeDef<TContext>
+  x: (() => void) | TerminalSentinel
 ): void;
 
-export declare function edge<TContext extends object>(
-  def: EdgeDef<TContext>
-): EdgeDef<TContext>;
+export declare function enter<TContext extends object>(
+  fn: (
+    ctx: TContext,
+    input: StateHookInput
+  ) => PatchLike<TContext> | Promise<PatchLike<TContext>>
+): void;
+
+export declare function exit<TContext extends object>(
+  fn: (
+    ctx: TContext,
+    input: StateHookInput
+  ) => PatchLike<TContext> | Promise<PatchLike<TContext>>
+): void;
+
+export declare function on<TContext extends object>(
+  event: string,
+  def: TargetDef | OnSetupFn
+): void;
+
+export declare function target<TContext extends object>(idOrPipeline: string | Pipeline<TContext>): TargetDef;
+
+export declare function guard<TContext extends object>(
+  fn: (ctx: TContext, input: OnGuardInput) => boolean | Promise<boolean>
+): void;
+
+export declare function pipeline<TContext extends object>(
+  p: Pipeline<TContext>
+): void;
 
 export declare function node<TContext extends object>(
   id: string,
-  def: PipelineNodeDef<TContext>
+  x: (() => void) | TerminalSentinel
+): void;
+
+export declare function action<TContext extends object>(
+  fn: (
+    ctx: TContext,
+    input: ActionInput
+  ) => PatchLike<TContext> | Promise<PatchLike<TContext>>
 ): void;
 
 export declare function fork<TContext extends object>(
-  condition: ((ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>) | undefined,
-  target: string | Pipeline<TContext>,
-  options?: { label?: string; metadata?: Record<string, unknown> }
-): PipelineForkDef<TContext>;
+  label: string,
+  target: TargetDef,
+  condition?: (ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>
+): void;
 
 export declare function terminal<TContext extends object>(
-  def?: Omit<PipelineNodeDef<TContext>, 'terminal'>
-): PipelineNodeDef<TContext>;
+  fn?: (
+    ctx: TContext,
+    input: ActionInput
+  ) => PatchLike<TContext> | Promise<PatchLike<TContext>>
+): TerminalSentinel;
 
 // ─── TypeScript Edge Inference Helpers ──────────────────────────────────────
 
-type ExtractEdges<TStates> = TStates extends Record<string, { edges?: infer E }>
+type ExtractEdges<TWhens> = TWhens extends Record<string, { on?: infer E }>
   ? E extends Record<string, unknown>
     ? keyof E
     : never
   : never;
 
-export type InferEdges<TConfig> = TConfig extends { states: infer TStates }
-  ? [ExtractEdges<TStates>] extends [never]
+export type InferEdges<TConfig> = TConfig extends { whens: infer TWhens }
+  ? [ExtractEdges<TWhens>] extends [never]
     ? string
-    : ExtractEdges<TStates> extends string
-      ? ExtractEdges<TStates>
+    : ExtractEdges<TWhens> extends string
+      ? ExtractEdges<TWhens>
       : string
   : string;
 
@@ -574,14 +646,14 @@ export declare class PipelineClass<TContext extends object = Record<string, unkn
 // ─── Errors ─────────────────────────────────────────────────────────────────
 
 export declare class PlexisError extends Error {
-  code: string;
+  code: PlexisErrorCode;
   domainId?: string;
   pipelineId?: string;
   nodeId?: string;
   context?: unknown;
 
   constructor(message: string, options?: {
-    code?: string;
+    code?: PlexisErrorCode;
     domainId?: string;
     pipelineId?: string;
     nodeId?: string;
@@ -596,4 +668,7 @@ export declare class PlexisError extends Error {
   static unknownTargetNode(pipelineId: string, fromNode: string, target: string): PlexisError;
   static unknownNode(id: string, node: string): PlexisError;
   static builderClosed(helperName: string): PlexisError;
+  static duplicateRegistration(event: string, helper: string): PlexisError;
+  static missingTarget(event: string): PlexisError;
+  static invalidTarget(helperName: string, detail: string): PlexisError;
 }

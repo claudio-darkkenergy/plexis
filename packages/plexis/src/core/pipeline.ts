@@ -75,7 +75,7 @@ export class Pipeline<TContext extends object = Record<string, unknown>>
     this.graph = buildGraphAPI(built.descriptor);
   }
 
-  async run(context: TContext, input?: unknown, _runCtx?: RunContext): Promise<PipelineRunResult<TContext>> {
+  async run(context: TContext, payload?: unknown, _runCtx?: RunContext): Promise<PipelineRunResult<TContext>> {
     const tracer = this._options.tracer as Tracer | undefined;
     const { errorPolicy = 'throw', merge } = this._options;
     const traceId = _runCtx?.traceId ?? (tracer?._idFactory?.() ?? crypto.randomUUID());
@@ -114,7 +114,7 @@ export class Pipeline<TContext extends object = Record<string, unknown>>
             parentId: nodeStartEvent?.id,
             contextSnapshot: tracer?.captureContext === 'before' || tracer?.captureContext === 'both' ? beforeCtx : undefined,
           });
-          const patch = await nodeDef.action(currentContext, { input, nodeId: currentNodeId, pipelineId: this.id, traceId });
+          const patch = await nodeDef.action(currentContext, { source: currentNodeId, scope: this.id, payload, traceId });
           currentContext = applyMerge(currentContext, patch, merge, {
             phase: 'pipeline-action', pipelineId: this.id, nodeId: currentNodeId,
           });
@@ -145,7 +145,7 @@ export class Pipeline<TContext extends object = Record<string, unknown>>
               level: 'condition', type: 'condition.started', status: 'started',
               pipelineId: this.id, nodeId: currentNodeId, label: forkDef.label,
             });
-            matches = await forkDef.condition(currentContext, { input, nodeId: currentNodeId, pipelineId: this.id, traceId });
+            matches = await forkDef.condition(currentContext, { payload, nodeId: currentNodeId, pipelineId: this.id, traceId });
             record({
               level: 'condition', type: matches ? 'condition.selected' : 'condition.skipped',
               status: matches ? 'selected' : 'skipped',
@@ -165,7 +165,7 @@ export class Pipeline<TContext extends object = Record<string, unknown>>
             } else {
               // Sub-pipeline: share traceId, link via parentId
               const subPipeline = forkDef.target as Pipeline<TContext>;
-              const subResult = await subPipeline.run(currentContext, input, {
+              const subResult = await subPipeline.run(currentContext, payload, {
                 traceId,
                 parentId: nodeStartEvent?.id,
               });

@@ -10,7 +10,7 @@ In this guide a single `POST /api/records` endpoint is backed by a Plexis pipeli
 Each stage of request processing is a pipeline node. Forks decide which path the request follows based on the outcome of the preceding node.
 
 ```typescript
-import { definePipeline, node, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type RequestCtx = {
   body: Record<string, unknown>;
@@ -22,51 +22,37 @@ type RequestCtx = {
 };
 
 const handleRequest = definePipeline<RequestCtx>('handle-request', () => {
-  node('validate', {
-    action: async (ctx) => {
-      const { userId, data } = ctx.body;
-      if (!userId || !data) {
-        return { validated: false, error: 'Missing userId or data' };
-      }
-      return { validated: true, userId: userId as string };
-    },
-    forks: [
-      fork((ctx) => !ctx.validated, 'error-response', { label: 'validation-failed' }),
-      fork((ctx) => ctx.validated,  'service',        { label: 'valid' }),
-    ],
+  node('validate', () => {
+    action(async (ctx) => {
+      if (!ctx.body.data) return { error: 'Missing required field: data' };
+      return { userId: ctx.body.userId as string, validated: true };
+    });
+    fork('error', target('error-response'), (ctx) => !ctx.validated);
+    fork('next', target('service'));
   });
 
-  node('service', {
-    action: async (ctx) => {
-      if (ctx.userId === 'banned') {
-        return { validated: false, error: 'User not authorized' };
-      }
-      return {};
-    },
-    forks: [
-      fork((ctx) => !ctx.validated, 'error-response', { label: 'service-failed' }),
-      fork(() => true,              'persist',         { label: 'ok' }),
-    ],
+  node('service', () => {
+    action(async (ctx) => ({ recordId: `rec_${ctx.userId}` }));
+    fork('error', target('error-response'), (ctx) => !!ctx.error);
+    fork('next', target('persist'));
   });
 
-  node('persist', {
-    action: async (ctx) => ({
-      recordId: `rec_${ctx.userId}_${Date.now()}`,
-    }),
-    forks: [fork(() => true, 'respond', { label: 'persisted' })],
+  node('persist', () => {
+    action(async (ctx) => ({}));
+    fork('next', target('respond'));
   });
 
-  node('respond', terminal({
-    action: async (ctx) => ({
+  node('respond', terminal(
+    async (ctx) => ({
       response: { status: 201, body: { id: ctx.recordId, ok: true } },
-    }),
-  }));
+    })
+  ));
 
-  node('error-response', terminal({
-    action: async (ctx) => ({
+  node('error-response', terminal(
+    async (ctx) => ({
       response: { status: 400, body: { error: ctx.error ?? 'Bad request' } },
-    }),
-  }));
+    })
+  ));
 
   return { initial: 'validate' };
 });
@@ -77,25 +63,21 @@ const handleRequest = definePipeline<RequestCtx>('handle-request', () => {
 A new domain instance is created per request so concurrent requests do not share state. The domain tracks where each request is in its lifecycle independently from the handler logic.
 
 ```typescript
-import { defineDomain, state, edge } from '@tde.io/plexis';
+import { defineDomain, when, on, terminal } from '@tde.io/plexis';
 
 type RequestLifecycle = { requestId: string };
 
 function createRequestDomain(requestId: string) {
   return defineDomain<RequestLifecycle>('request', () => {
-    state('pending', {
-      edges: {
-        START: edge({ target: 'processing' }),
-      },
+    when('pending', () => {
+      on('start', target('processing'));
     });
-    state('processing', {
-      edges: {
-        COMPLETE: edge({ target: 'complete' }),
-        FAIL:     edge({ target: 'failed' }),
-      },
+    when('processing', () => {
+      on('complete', target('complete'));
+      on('fail', target('failed'));
     });
-    state('complete', { terminal: true });
-    state('failed',   { terminal: true });
+    when('complete', terminal());
+    when('failed', terminal());
 
     return { context: { requestId }, initial: 'pending' };
   });
@@ -120,16 +102,16 @@ const server = http.createServer(async (req, res) => {
   const body = JSON.parse(raw) as Record<string, unknown>;
 
   const requestDomain = createRequestDomain(crypto.randomUUID());
-  await requestDomain.follow('START');
+  await requestDomain.follow('start');
 
   const result = await handleRequest.run({ body, validated: false });
 
   const { status, body: resBody } = result.context.response!;
 
   if (status === 201) {
-    await requestDomain.follow('COMPLETE');
+    await requestDomain.follow('complete');
   } else {
-    await requestDomain.follow('FAIL');
+    await requestDomain.follow('fail');
   }
 
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -163,4 +145,4 @@ curl -X POST http://localhost:3000/api/records \
   -d '{"userId":"alice"}'
 ```
 
-The missing field routes the pipeline to the `error-response` terminal node, which writes a `400` response. The request domain follows `FAIL` and lands on the `failed` terminal state.
+The missing field routes the pipeline to the `error-response` terminal node, which writes a `400` response. The request domain follows `fail` and lands on the `failed` terminal state.
