@@ -103,4 +103,23 @@ jobs:
 
       - name: Publish to npm
         working-directory: packages/plexis
-        run: pnpm publish --access public --no-git-checks --provenance
+        run: |
+          # Capture output so a silent OIDC fallback can be turned into a loud,
+          # actionable failure instead of a misleading "E404 Not Found".
+          # GitHub's default shell runs with `set -eo pipefail`; disable errexit
+          # around the publish so the guard below always runs.
+          publish_log="$(mktemp)"
+          set +e
+          pnpm publish --access public --no-git-checks --provenance 2>&1 | tee "$publish_log"
+          status=${PIPESTATUS[0]}
+          set -e
+
+          # Narrowly scoped to OIDC token-exchange signals so transient registry
+          # 5xx errors still surface as themselves via `exit $status` below.
+          if grep -qE 'Skipped OIDC|ERR_PNPM_AUTH_TOKEN_EXCHANGE' "$publish_log"; then
+            echo "::error title=npm OIDC token exchange failed::Trusted publishing did not authenticate; npm rejected the GitHub OIDC token, so this publish was NOT authenticated."
+            echo "Remediation: confirm the npm trusted-publisher record for @tde.io/plexis names this workflow file (build.yml) and any required environment at https://www.npmjs.com/package/@tde.io/plexis/access"
+            exit 1
+          fi
+
+          exit "$status"
