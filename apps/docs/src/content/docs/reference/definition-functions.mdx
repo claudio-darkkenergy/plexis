@@ -112,15 +112,15 @@ Additional configuration:
 ### Example
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type PaymentContext = { cardValid: boolean; charged: boolean };
 
 const payment = definePipeline<PaymentContext>('payment', () => {
   node('validate', () => {
     action(async (ctx) => ({ cardValid: ctx.cardValid }));
-    fork((ctx) => ctx.cardValid, 'charge');
-    fork((ctx) => !ctx.cardValid, 'decline');
+    fork('charge', target('charge'), (ctx) => ctx.cardValid);
+    fork('decline', target('decline'), (ctx) => !ctx.cardValid);
   });
   node('charge', terminal(async () => ({ charged: true })));
   node('decline', terminal());

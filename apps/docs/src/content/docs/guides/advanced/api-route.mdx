@@ -10,7 +10,7 @@ In this guide a single `POST /api/records` endpoint is backed by a Plexis pipeli
 Each stage of request processing is a pipeline node. Forks decide which path the request follows based on the outcome of the preceding node.
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type RequestCtx = {
   body: Record<string, unknown>;
@@ -27,19 +27,19 @@ const handleRequest = definePipeline<RequestCtx>('handle-request', () => {
       if (!ctx.body.data) return { error: 'Missing required field: data' };
       return { userId: ctx.body.userId as string, validated: true };
     });
-    fork((ctx) => !ctx.validated, 'error-response');
-    fork(undefined, 'service');
+    fork('error', target('error-response'), (ctx) => !ctx.validated);
+    fork('next', target('service'));
   });
 
   node('service', () => {
     action(async (ctx) => ({ recordId: `rec_${ctx.userId}` }));
-    fork((ctx) => !!ctx.error, 'error-response');
-    fork(undefined, 'persist');
+    fork('error', target('error-response'), (ctx) => !!ctx.error);
+    fork('next', target('persist'));
   });
 
   node('persist', () => {
     action(async (ctx) => ({}));
-    fork(undefined, 'respond');
+    fork('next', target('respond'));
   });
 
   node('respond', terminal(

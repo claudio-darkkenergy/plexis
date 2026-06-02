@@ -29,7 +29,7 @@ describe('ActionInput type-level assertions', () => {
           expectTypeOf(input.traceId).toEqualTypeOf<string>();
           return {};
         });
-        fork(undefined, 'x');
+        fork('next', target('x'));
       });
       return { initial: 'x' };
     });

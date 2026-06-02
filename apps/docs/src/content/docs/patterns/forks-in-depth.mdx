@@ -8,18 +8,18 @@ Forks are how a pipeline decides where to go next. They live on a node's `forks`
 ## First-match-wins ordering
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type Ctx = { score: number };
 
 const classify = definePipeline<Ctx>('classify', () => {
   node('evaluate', () => {
     action(async (ctx) => ctx);
-    fork((ctx) => ctx.score >= 90, 'grade-a');
-    fork((ctx) => ctx.score >= 80, 'grade-b');
-    fork((ctx) => ctx.score >= 70, 'grade-c');
-    fork((ctx) => ctx.score >= 60, 'grade-d');
-    fork(undefined, 'grade-f');
+    fork('grade-a', target('grade-a'), (ctx) => ctx.score >= 90);
+    fork('grade-b', target('grade-b'), (ctx) => ctx.score >= 80);
+    fork('grade-c', target('grade-c'), (ctx) => ctx.score >= 70);
+    fork('grade-d', target('grade-d'), (ctx) => ctx.score >= 60);
+    fork('grade-f', target('grade-f'));
   });
   node('grade-a', terminal());
   node('grade-b', terminal());
@@ -39,18 +39,18 @@ A score of 85 satisfies `score >= 80` and `score >= 70`, but only the first matc
 
 ## The catch-all fork
 
-A fork with `condition: undefined` (or omitting the condition from `fork()`) always matches. Place it last to handle any input not caught by earlier conditions.
+A fork with no `condition` always matches. Place it last to handle any input not caught by earlier conditions.
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type Ctx = { status: string };
 
 const route = definePipeline<Ctx>('route', () => {
   node('dispatch', () => {
-    fork((ctx) => ctx.status === 'approved', 'process');
-    fork((ctx) => ctx.status === 'review', 'hold');
-    fork(undefined, 'reject');
+    fork('approved', target('process'), (ctx) => ctx.status === 'approved');
+    fork('review', target('hold'), (ctx) => ctx.status === 'review');
+    fork('default', target('reject'));
   });
   node('process', terminal());
   node('hold', terminal());
@@ -64,13 +64,13 @@ const route = definePipeline<Ctx>('route', () => {
 If the `forks` array is empty, or every condition returns `false`, the pipeline stops at the current node with `status: 'stopped'` in the result. This is not an error — it is the intended behavior for optional continuations.
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type Ctx = { sendNotification: boolean };
 
 const maybe = definePipeline<Ctx>('maybe', () => {
   node('check', () => {
-    fork((ctx) => ctx.sendNotification, 'notify');
+    fork('notify', target('notify'), (ctx) => ctx.sendNotification);
   });
   node('notify', terminal());
   return { initial: 'check' };
@@ -88,15 +88,15 @@ Distinguish this from a terminal node: `status: 'completed'` means a terminal no
 Conditions receive the context *after* the node's `action` has run and its patch has been merged. Write conditions against the updated context, not the input context.
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type Ctx = { raw: number; score: number };
 
 const score = definePipeline<Ctx>('score', () => {
   node('compute', () => {
     action(async (ctx) => ({ score: ctx.raw * 10 }));
-    fork((ctx) => ctx.score >= 100, 'pass', { label: 'pass' });
-    fork(undefined, 'fail', { label: 'fail' });
+    fork('pass', target('pass'), (ctx) => ctx.score >= 100);
+    fork('fail', target('fail'));
   });
   node('pass', terminal());
   node('fail', terminal());

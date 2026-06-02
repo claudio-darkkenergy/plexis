@@ -41,8 +41,11 @@ function isTargetDef(x: unknown): x is TargetDef {
     && (x as Record<string, unknown>).__type === 'TargetDef';
 }
 
-export function target(id: string): TargetDef {
-  return { __type: 'TargetDef', id };
+export function target<TContext extends object>(idOrPipeline: string | PipelineType<TContext>): TargetDef {
+  if (typeof idOrPipeline === 'string') {
+    return { __type: 'TargetDef', id: idOrPipeline };
+  }
+  return { __type: 'TargetDef', pipeline: idOrPipeline };
 }
 
 // ─── Scope types ─────────────────────────────────────────────────────────────
@@ -153,6 +156,9 @@ export function on<TContext extends object>(
   if (!scope.def.on) scope.def.on = {};
 
   if (isTargetDef(def)) {
+    if (!('id' in def)) {
+      throw PlexisError.invalidTarget('on', 'pipeline targets are not valid for domain flows; use target(\'state-id\')');
+    }
     scope.def.on[event] = { target: def.id };
     return;
   }
@@ -170,6 +176,9 @@ export function on<TContext extends object>(
     throw PlexisError.missingTarget(event);
   }
 
+  if (!('id' in result)) {
+    throw PlexisError.invalidTarget('on', 'pipeline targets are not valid for domain flows; use target(\'state-id\')');
+  }
   const onDef: OnDef<any> = { target: result.id };
   if (onScope.guard !== null) onDef.guard = onScope.guard;
   if (onScope.action !== null) onDef.action = onScope.action;
@@ -253,22 +262,20 @@ export function action<TContext extends object>(
 }
 
 export function fork<TContext extends object>(
-  condition:
-    | ((ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>)
-    | undefined,
-  target: string | PipelineType<TContext>,
-  options: { label?: string; metadata?: Record<string, unknown> } = {}
+  label: string,
+  targetSentinel: TargetDef,
+  condition?: (ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>
 ): void {
   const scope = getCurrentScope();
   if (!scope || scope.kind !== 'node') {
     throw PlexisError.builderClosed('fork');
   }
+  if (!isTargetDef(targetSentinel)) {
+    throw PlexisError.invalidTarget('fork', 'second argument must be a target(...) sentinel; use target(\'node-id\') or target(pipeline)');
+  }
   if (!scope.def.forks) scope.def.forks = [];
-  const forkDef: PipelineForkDef<TContext> = {
-    condition,
-    target,
-    label: options.label,
-    metadata: options.metadata,
-  };
+  const forkTarget = 'id' in targetSentinel ? targetSentinel.id : targetSentinel.pipeline;
+  const forkDef: PipelineForkDef<TContext> = { target: forkTarget, label };
+  if (condition !== undefined) forkDef.condition = condition;
   scope.def.forks.push(forkDef);
 }

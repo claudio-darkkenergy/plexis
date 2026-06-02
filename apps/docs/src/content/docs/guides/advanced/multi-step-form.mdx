@@ -10,7 +10,7 @@ A domain owns which step is currently active. Each forward edge passes the submi
 Each step gets its own pipeline that inspects the submitted form data and sets an `error` field in context if anything is invalid.
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type CheckoutCtx = {
   shipping?: { address: string; city: string; zip: string };
@@ -27,8 +27,8 @@ const validateShipping = definePipeline<CheckoutCtx>('validate-shipping', () => 
       }
       return { error: undefined };
     });
-    fork((ctx) => !!ctx.error, 'fail');
-    fork(undefined, 'pass');
+    fork('fail', target('fail'), (ctx) => !!ctx.error);
+    fork('pass', target('pass'));
   });
   node('fail', terminal());
   node('pass', terminal());
@@ -44,8 +44,8 @@ const validatePayment = definePipeline<CheckoutCtx>('validate-payment', () => {
       }
       return { error: undefined };
     });
-    fork((ctx) => !!ctx.error, 'fail');
-    fork(undefined, 'pass');
+    fork('fail', target('fail'), (ctx) => !!ctx.error);
+    fork('pass', target('pass'));
   });
   node('fail', terminal());
   node('pass', terminal());

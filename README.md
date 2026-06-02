@@ -25,8 +25,8 @@ type OrderContext = { cardValid: boolean };
 // Pipeline: runs once per invocation — validate then route to charge or decline.
 const payment = definePipeline<OrderContext>('payment', () => {
   node('validate', () => {
-    fork((ctx) => ctx.cardValid,  'charge',  { label: 'card-ok' });
-    fork((ctx) => !ctx.cardValid, 'decline', { label: 'card-invalid' });
+    fork('card-ok', target('charge'), (ctx) => ctx.cardValid);
+    fork('card-invalid', target('decline'), (ctx) => !ctx.cardValid);
   });
   node('charge',  terminal());
   node('decline', terminal());

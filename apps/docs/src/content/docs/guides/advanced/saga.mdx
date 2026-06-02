@@ -10,7 +10,7 @@ A saga is a sequence of steps where a later failure means the earlier completed 
 This saga reserves inventory, charges the card, and ships the order. If charging fails, it releases the inventory. If shipping fails, it both refunds the charge and releases the inventory. Each step has an explicit compensation route.
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type FulfillCtx = {
   orderId: string;
@@ -27,15 +27,15 @@ const fulfillOrder = definePipeline<FulfillCtx>('fulfill-order', () => {
   // ── Step 1: Reserve inventory ───────────────────────────────────────────────
   node('reserve-inventory', () => {
     action(async (ctx) => ({ inventoryReserved: true }));
-    fork((ctx) => ctx.inventoryReserved, 'charge-card', { label: 'reserved' });
-    fork(undefined, 'saga-failed-no-stock', { label: 'no-stock' });
+    fork('reserved', target('charge-card'), (ctx) => ctx.inventoryReserved);
+    fork('no-stock', target('saga-failed-no-stock'));
   });
 
   // ── Step 2: Charge the card ─────────────────────────────────────────────────
   node('charge-card', () => {
     action(async (ctx) => ({ chargeId: 'ch_001' }));
-    fork((ctx) => !!ctx.chargeId, 'ship-order', { label: 'charged' });
-    fork(undefined, 'compensate-release-inventory', { label: 'charge-failed' });
+    fork('charged', target('ship-order'), (ctx) => !!ctx.chargeId);
+    fork('charge-failed', target('compensate-release-inventory'));
   });
 
   // ── Step 3: Ship the order ──────────────────────────────────────────────────
@@ -44,21 +44,21 @@ const fulfillOrder = definePipeline<FulfillCtx>('fulfill-order', () => {
       shipAttempts: ctx.shipAttempts + 1,
       shipped: ctx.shipAttempts >= 2,
     }));
-    fork((ctx) => ctx.shipped, 'saga-complete', { label: 'shipped' });
-    fork((ctx) => ctx.shipAttempts < 3, 'ship-order', { label: 'retry' });
-    fork(undefined, 'compensate-refund-and-release', { label: 'shipping-failed' });
+    fork('shipped', target('saga-complete'), (ctx) => ctx.shipped);
+    fork('retry', target('ship-order'), (ctx) => ctx.shipAttempts < 3);
+    fork('shipping-failed', target('compensate-refund-and-release'));
   });
 
   // ── Compensation: release inventory (charge never happened) ─────────────────
   node('compensate-release-inventory', () => {
     action(async (ctx) => ({ inventoryReserved: false }));
-    fork(undefined, 'saga-compensated');
+    fork('next', target('saga-compensated'));
   });
 
   // ── Compensation: refund + release (charge succeeded, shipping failed) ───────
   node('compensate-refund-and-release', () => {
     action(async (ctx) => ({ chargeId: null, inventoryReserved: false }));
-    fork(undefined, 'saga-compensated');
+    fork('next', target('saga-compensated'));
   });
 
   // ── Terminals ───────────────────────────────────────────────────────────────

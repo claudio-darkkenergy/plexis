@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Pipeline, definePipeline } from '../src/core/pipeline.js';
 import { PlexisError } from '../src/core/errors.js';
-import { node, action, fork, terminal } from '../src/core/helpers.js';
+import { node, action, fork, target, terminal } from '../src/core/helpers.js';
 import { createTracer } from '../src/core/tracer.js';
 
 // ─── Construction ──────────────────────────────────────────────────────────
@@ -11,7 +11,7 @@ describe('definePipeline and new Pipeline parity', () => {
   const setup = () => {
     node('validate', () => {
       action(async () => ({ checked: true }));
-      fork(undefined, 'done');
+      fork('next', target('done'));
     });
     node('done', terminal());
     return { initial: 'validate' };
@@ -58,7 +58,7 @@ describe('construction validation', () => {
   it('throws UNKNOWN_TARGET_NODE when fork target is missing', () => {
     expect(() =>
       definePipeline('p', () => {
-        node('a', () => { fork(undefined, 'gone'); });
+        node('a', () => { fork('next', target('gone')); });
         node('b', terminal());
         return { initial: 'a' };
       })
@@ -81,7 +81,7 @@ describe('pipeline.run() — execution flow', () => {
     const p = definePipeline('p', () => {
       node('start', () => {
         action(async () => ({ started: true }));
-        fork(undefined, 'end');
+        fork('next', target('end'));
       });
       node('end', terminal());
       return { initial: 'start' };
@@ -93,21 +93,21 @@ describe('pipeline.run() — execution flow', () => {
   it('first-match-wins fork evaluation', async () => {
     const p = definePipeline('p', () => {
       node('split', () => {
-        fork(async (ctx: Record<string, unknown>) => ctx.val === 'a', 'a');
-        fork(async (ctx: Record<string, unknown>) => ctx.val === 'b', 'b');
-        fork(undefined, 'fallback');
+        fork('to-a', target('a'), async (ctx: Record<string, unknown>) => ctx.val === 'a');
+        fork('to-b', target('b'), async (ctx: Record<string, unknown>) => ctx.val === 'b');
+        fork('to-fallback', target('fallback'));
       });
       node('a', () => {
         action(async () => ({ chosen: 'a' }));
-        fork(undefined, 'end');
+        fork('next', target('end'));
       });
       node('b', () => {
         action(async () => ({ chosen: 'b' }));
-        fork(undefined, 'end');
+        fork('next', target('end'));
       });
       node('fallback', () => {
         action(async () => ({ chosen: 'fallback' }));
-        fork(undefined, 'end');
+        fork('next', target('end'));
       });
       node('end', terminal());
       return { initial: 'split' };
@@ -119,16 +119,16 @@ describe('pipeline.run() — execution flow', () => {
   it('unconditional fork acts as catch-all', async () => {
     const p = definePipeline('p', () => {
       node('gate', () => {
-        fork((ctx: Record<string, unknown>) => ctx.ok === true, 'yes');
-        fork(undefined, 'no');
+        fork('to-yes', target('yes'), (ctx: Record<string, unknown>) => ctx.ok === true);
+        fork('to-no', target('no'));
       });
       node('yes', () => {
         action(async () => ({ chosen: 'yes' }));
-        fork(undefined, 'end');
+        fork('next', target('end'));
       });
       node('no', () => {
         action(async () => ({ chosen: 'no' }));
-        fork(undefined, 'end');
+        fork('next', target('end'));
       });
       node('end', terminal());
       return { initial: 'gate' };
@@ -140,7 +140,7 @@ describe('pipeline.run() — execution flow', () => {
   it('no matching fork produces status: stopped', async () => {
     const p = definePipeline('p', () => {
       node('gate', () => {
-        fork((ctx: Record<string, unknown>) => Boolean(ctx.never), 'end');
+        fork('to-end', target('end'), (ctx: Record<string, unknown>) => Boolean(ctx.never));
       });
       node('end', terminal());
       return { initial: 'gate' };
@@ -163,7 +163,7 @@ describe('pipeline.run() — execution flow', () => {
 
   it('terminal node with final action merges patch before completion', async () => {
     const p = definePipeline('p', () => {
-      node('start', () => { fork(undefined, 'end'); });
+      node('start', () => { fork('next', target('end')); });
       node('end', terminal(async () => ({ finalized: true })));
       return { initial: 'start' };
     });
@@ -197,7 +197,7 @@ describe('sub-pipeline embedding', () => {
       return { initial: 'work' };
     });
     const parent = definePipeline('parent', () => {
-      node('start', () => { fork(undefined, sub); });
+      node('start', () => { fork('to-sub', target(sub)); });
       return { initial: 'start' };
     });
     const result = await parent.run({});
@@ -211,7 +211,7 @@ describe('ActionInput — node action and terminal action input shape', () => {
     const p = definePipeline('my-pipeline', () => {
       node('validate-card', () => {
         action(async (_ctx, input) => { capturedInput = input; return { seen: input.source }; });
-        fork(undefined, 'done');
+        fork('next', target('done'));
       });
       node('done', terminal());
       return { initial: 'validate-card' };
@@ -229,7 +229,7 @@ describe('ActionInput — node action and terminal action input shape', () => {
   it('terminal(fn) final action receives ActionInput and merges patch before completed', async () => {
     let capturedInput: unknown;
     const p = definePipeline('my-pipeline', () => {
-      node('start', () => { fork(undefined, 'charge'); });
+      node('start', () => { fork('next', target('charge')); });
       node('charge', terminal(async (_ctx, input) => {
         capturedInput = input;
         return { at: input.source };
@@ -251,7 +251,7 @@ describe('ActionInput — node action and terminal action input shape', () => {
     const p = definePipeline('p-no-input', () => {
       node('only', () => {
         action(async (_ctx, input) => { capturedInput = input; return {}; });
-        fork(undefined, 'done');
+        fork('next', target('done'));
       });
       node('done', terminal());
       return { initial: 'only' };

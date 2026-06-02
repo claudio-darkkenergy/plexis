@@ -140,7 +140,7 @@ await pipeline.run({ processed: false, inputValue: null }, { userId: 'u1' });
 
 ## `PipelineConditionInput`
 
-Passed to fork condition functions: `fork((ctx, input: PipelineConditionInput) => boolean, target)`.
+Passed to fork condition functions: `fork(label, target, (ctx, input: PipelineConditionInput) => boolean)`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -152,7 +152,7 @@ Passed to fork condition functions: `fork((ctx, input: PipelineConditionInput) =
 ### Example
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 import type { PipelineConditionInput } from '@tde.io/plexis';
 
 type Ctx = { score: number };
@@ -160,13 +160,14 @@ type Ctx = { score: number };
 const pipeline = definePipeline<Ctx>('grade', () => {
   node('decide', () => {
     fork(
+      'pass',
+      target('pass'),
       (ctx, input: PipelineConditionInput) => {
         const threshold = (input.input as { threshold: number }).threshold;
         return ctx.score >= threshold;
-      },
-      'pass'
+      }
     );
-    fork(undefined, 'fail');
+    fork('fail', target('fail'));
   });
   node('pass', terminal());
   node('fail', terminal());

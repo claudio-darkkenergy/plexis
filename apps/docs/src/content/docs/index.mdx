@@ -25,15 +25,15 @@ npm install @tde.io/plexis
 Define a pipeline and domain, then drive the domain forward:
 
 ```typescript
-import { defineDomain, definePipeline, when, on, node, action, fork, terminal } from '@tde.io/plexis';
+import { defineDomain, definePipeline, when, on, target, pipeline, node, action, fork, terminal } from '@tde.io/plexis';
 
 type OrderContext = { cardValid: boolean };
 
 // Pipeline: runs once per invocation — validate then route to charge or decline
 const payment = definePipeline<OrderContext>('payment', () => {
   node('validate', () => {
-    fork((ctx) => ctx.cardValid, 'charge', { label: 'card-ok' });
-    fork((ctx) => !ctx.cardValid, 'decline', { label: 'card-invalid' });
+    fork('card-ok', target('charge'), (ctx) => ctx.cardValid);
+    fork('card-invalid', target('decline'), (ctx) => !ctx.cardValid);
   });
   node('charge', terminal());
   node('decline', terminal());

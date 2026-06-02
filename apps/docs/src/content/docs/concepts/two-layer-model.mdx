@@ -38,13 +38,13 @@ The domain retains its state between operations. `order.state` is `'fulfilled'` 
 A **Pipeline** is a workflow that executes start-to-finish in a single invocation. It begins at the `initial` node, evaluates fork conditions to decide which node comes next, runs node actions, and stops at a terminal node (or when no fork matches). After `pipeline.run()` returns, the pipeline itself is unchanged — you can call `run()` again with different context.
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 const validatePayment = definePipeline('validate-payment', () => {
   node('check-card', () => {
     action(async (ctx) => ({ checked: true }));
-    fork((ctx) => ctx.cardValid, 'charge', { label: 'valid' });
-    fork((ctx) => !ctx.cardValid, 'decline', { label: 'invalid' });
+    fork('valid', target('charge'), (ctx) => ctx.cardValid);
+    fork('invalid', target('decline'), (ctx) => !ctx.cardValid);
   });
   node('charge', terminal());
   node('decline', terminal());
@@ -80,7 +80,7 @@ import { defineDomain, definePipeline, when, on, node, action, fork, terminal } 
 const chargeCard = definePipeline('charge-card', () => {
   node('charge', () => {
     action(async (ctx) => ({ charged: true }));
-    fork(undefined, 'done');
+    fork('next', target('done'));
   });
   node('done', terminal());
   return { initial: 'charge' };

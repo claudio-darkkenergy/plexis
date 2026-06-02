@@ -146,15 +146,15 @@ None (`void`).
 ### Example
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type Ctx = { score: number; passed: boolean };
 
 const quiz = definePipeline<Ctx>('quiz', () => {
   node('grade', () => {
     action(async (ctx) => ({ score: 90 }));
-    fork((ctx) => ctx.score >= 70, 'pass');
-    fork((ctx) => ctx.score < 70, 'fail');
+    fork('pass', target('pass'), (ctx) => ctx.score >= 70);
+    fork('fail', target('fail'), (ctx) => ctx.score < 70);
   });
   node('pass', terminal(async () => ({ passed: true })));
   node('fail', terminal(async () => ({ passed: false })));
@@ -176,46 +176,44 @@ function action<TContext>(
 
 ---
 
-## `fork(condition, target, options?)`
+## `fork(label, target, condition?)`
 
 Registers a forward transition on the current node in declaration order. Must be called inside a `node()` setup function.
 
 ```typescript
 function fork<TContext>(
-  condition:
-    | ((ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>)
-    | undefined,
-  target: string | Pipeline<TContext>,
-  options?: { label?: string; metadata?: Record<string, unknown> }
+  label: string,
+  target: TargetDef,
+  condition?: (ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>
 ): void
 ```
 
 ### Parameters
 
-**`condition`** `((ctx, input) => boolean | Promise<boolean>) | undefined`
+**`label`** `string`
 
-Fork predicate. Pass `undefined` for an unconditional forward edge; otherwise the first fork whose condition returns `true` is followed.
+Required name for this fork. Appears in tracer events and graph introspection output.
 
-**`target`** `string | Pipeline<TContext>`
+**`target`** `TargetDef`
 
-ID of the target node, or a sub-pipeline to embed.
+A `target(...)` sentinel wrapping either a node-id string or a sub-pipeline. Pass `target('node-id')` or `target(pipeline)`. Bare strings and bare `Pipeline` objects are rejected at compile time and at runtime.
 
-**`options`** `{ label?: string; metadata?: Record<string, unknown> }` *(optional)*
+**`condition`** `((ctx, input) => boolean | Promise<boolean>)` *(optional)*
 
-Optional label and metadata attached to the fork.
+Fork predicate. Omit for an unconditional forward edge; otherwise the first fork whose condition returns `true` is followed.
 
 ### Example
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type Ctx = { score: number };
 
 const pipeline = definePipeline<Ctx>('check', () => {
   node('evaluate', () => {
-    fork((ctx) => ctx.score >= 90, 'excellent', { label: 'high-score' });
-    fork((ctx) => ctx.score >= 60, 'passing',   { label: 'passing' });
-    fork(undefined, 'failing');  // unconditional fallback
+    fork('high-score', target('excellent'), (ctx) => ctx.score >= 90);
+    fork('passing', target('passing'), (ctx) => ctx.score >= 60);
+    fork('failing', target('failing'));  // unconditional fallback
   });
   node('excellent', terminal());
   node('passing', terminal());
@@ -255,7 +253,7 @@ type Ctx = { result: string };
 
 const pipeline = definePipeline<Ctx>('process', () => {
   node('start', () => {
-    fork(undefined, 'finish');
+    fork('next', target('finish'));
   });
   // terminal with a final action that patches context before stopping
   node('finish', terminal(async (ctx) => ({ result: 'done' })));

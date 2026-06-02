@@ -136,12 +136,12 @@ const dot = toDot(descriptor);
 The same functions work for `pipeline.graph.describe()` — `descriptor.kind` will be `'pipeline'` and nodes will have `kind: 'pipeline-node'`. Fork edges have `kind: 'pipeline-fork'` and carry the fork label.
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 const charge = definePipeline('charge', () => {
   node('validate', () => {
-    fork((ctx) => ctx.cardValid, 'charge');
-    fork((ctx) => !ctx.cardValid, 'decline');
+    fork('charge', target('charge'), (ctx) => ctx.cardValid);
+    fork('decline', target('decline'), (ctx) => !ctx.cardValid);
   });
   node('charge', terminal());
   node('decline', terminal());

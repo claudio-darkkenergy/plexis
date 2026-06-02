@@ -9,8 +9,8 @@ spaces MUST be collapsed to a single space.
 
 #### Scenario: Padded call arguments collapsed
 
-- **WHEN** a snippet contains `fork(undefined,        'saga-failed-no-stock', { label: 'no-stock' });`
-- **THEN** it is rewritten as `fork(undefined, 'saga-failed-no-stock', { label: 'no-stock' });`
+- **WHEN** a snippet contains `fork('no-stock',        target('saga-failed-no-stock'));`
+- **THEN** it is rewritten as `fork('no-stock', target('saga-failed-no-stock'));`
 
 #### Scenario: Leading indentation preserved
 

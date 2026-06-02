@@ -29,8 +29,8 @@ import { defineDomain, definePipeline, when, on, target, guard, pipeline, enter,
 const payment = definePipeline('payment', () => {
   node('validate-card', () => {
     action(async (ctx) => ({ cardChecked: true }));
-    fork((ctx) => ctx.cardValid, 'charge', { label: 'card-ok' });
-    fork((ctx) => !ctx.cardValid, 'decline', { label: 'card-invalid' });
+    fork('card-ok', target('charge'), (ctx) => ctx.cardValid);
+    fork('card-invalid', target('decline'), (ctx) => !ctx.cardValid);
   });
   node('charge', terminal());
   node('decline', terminal());

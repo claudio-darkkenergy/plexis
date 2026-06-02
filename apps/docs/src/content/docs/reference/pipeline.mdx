@@ -35,15 +35,15 @@ Arbitrary value passed to each node's action and fork conditions via `PipelineAc
 ### Example
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type Ctx = { validated: boolean; charged: boolean };
 
 const payment = definePipeline<Ctx>('payment', () => {
   node('validate', () => {
     action(async (ctx) => ({ validated: true }));
-    fork((ctx) => ctx.validated, 'charge');
-    fork(undefined, 'decline');
+    fork('charge', target('charge'), (ctx) => ctx.validated);
+    fork('decline', target('decline'));
   });
   node('charge', terminal(async () => ({ charged: true })));
   node('decline', terminal());

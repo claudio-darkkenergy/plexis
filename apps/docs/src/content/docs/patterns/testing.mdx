@@ -97,15 +97,15 @@ test('withdraw is blocked when balance is insufficient', async () => {
 Construct context to satisfy exactly the condition you want to exercise, then call `pipeline.run()`:
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 import { expect, test } from 'vitest';
 
 type Ctx = { cardValid: boolean; charged: boolean };
 
 const charge = definePipeline<Ctx>('charge', () => {
   node('check-card', () => {
-    fork((ctx) => ctx.cardValid, 'charge');
-    fork((ctx) => !ctx.cardValid, 'decline');
+    fork('charge', target('charge'), (ctx) => ctx.cardValid);
+    fork('decline', target('decline'), (ctx) => !ctx.cardValid);
   });
   node('charge', terminal());
   node('decline', terminal());

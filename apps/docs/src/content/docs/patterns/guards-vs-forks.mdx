@@ -37,15 +37,15 @@ The `DomainFollowResult.status` will be `'blocked'` when a guard rejects the tra
 A fork lives on a pipeline node's `forks` array. Unlike a guard, forks do not block execution — they *route* it. The pipeline always continues; the fork decides which direction it takes.
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type Ctx = { amount: number; fundsSufficient: boolean };
 
 const process = definePipeline<Ctx>('process', () => {
   node('check-funds', () => {
     action(async (ctx) => ({ fundsSufficient: ctx.amount <= 100 }));
-    fork((ctx) => ctx.fundsSufficient, 'charge');
-    fork((ctx) => !ctx.fundsSufficient, 'decline');
+    fork('charge', target('charge'), (ctx) => ctx.fundsSufficient);
+    fork('decline', target('decline'), (ctx) => !ctx.fundsSufficient);
   });
   node('charge', terminal());
   node('decline', terminal());
@@ -78,14 +78,14 @@ const result = await process.run({ amount: 150, fundsSufficient: false });
 Yes. A domain edge can have a `guard` *and* a `pipeline`. If the guard passes, the pipeline runs as part of the transition. Inside that pipeline, forks route the work.
 
 ```typescript
-import { defineDomain, definePipeline, when, on, enter, exit, node, action, fork, terminal } from '@tde.io/plexis';
+import { defineDomain, definePipeline, when, on, target, guard, pipeline, enter, exit, node, action, fork, terminal } from '@tde.io/plexis';
 
 type Ctx = { balance: number; amount: number; charged: boolean };
 
 const charge = definePipeline<Ctx>('charge', () => {
   node('attempt', () => {
     action(async (ctx) => ({ charged: true }));
-    fork(undefined, 'done');
+    fork('next', target('done'));
   });
   node('done', terminal());
   return { initial: 'attempt' };

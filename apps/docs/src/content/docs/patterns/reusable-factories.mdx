@@ -44,20 +44,19 @@ console.log(orderB.state); // 'pending' — independent
 ## A pipeline factory
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type ChargeCtx = { amount: number; currency: string; charged: boolean };
 
 function createChargePipeline(maxAmount: number) {
   return definePipeline<ChargeCtx>('charge', () => {
     node('validate', () => {
-      fork(
-          (ctx);
-      fork(undefined, 'reject', { label: 'exceeds-limit' });
+      fork('charge', target('charge'), (ctx) => ctx.amount <= maxAmount);
+      fork('exceeds-limit', target('reject'), (ctx) => ctx.amount > maxAmount);
     });
     node('charge', () => {
       action(async (ctx) => ({ charged: true }));
-      fork(undefined, 'done');
+      fork('next', target('done'));
     });
     node('reject', terminal());
     node('done', terminal());

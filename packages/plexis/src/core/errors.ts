@@ -95,4 +95,11 @@ export class PlexisError extends Error {
       { code: 'MISSING_TARGET' }
     );
   }
+
+  static invalidTarget(helperName: string, detail: string): PlexisError {
+    return new PlexisError(
+      `${helperName}() — invalid target: ${detail}`,
+      { code: 'INVALID_TARGET' }
+    );
+  }
 }

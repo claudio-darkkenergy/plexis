@@ -83,12 +83,12 @@ console.log(reachable.map((n) => n.id));
 Pipelines have the same graph API under `pipeline.graph`:
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 const process = definePipeline('process', () => {
   node('validate', () => {
-    fork((ctx) => ctx.valid, 'accept');
-    fork((ctx) => !ctx.valid, 'reject');
+    fork('accept', target('accept'), (ctx) => ctx.valid);
+    fork('reject', target('reject'), (ctx) => !ctx.valid);
   });
   node('accept', terminal());
   node('reject', terminal());

@@ -193,7 +193,7 @@ describe('action(), fork()', () => {
   });
 
   it('fork() throws BUILDER_CLOSED outside any scope', () => {
-    expect(() => fork(undefined, 'x')).toThrow(
+    expect(() => fork('to-x', target('x'))).toThrow(
       expect.objectContaining({ code: 'BUILDER_CLOSED' })
     );
   });
@@ -211,7 +211,7 @@ describe('action(), fork()', () => {
     const scope = pipelineScope();
     expect(() =>
       withScope(scope, () => {
-        fork(undefined, 'x');
+        fork('to-x', target('x'));
       })
     ).toThrow(expect.objectContaining({ code: 'BUILDER_CLOSED' }));
   });
@@ -223,8 +223,8 @@ describe('action(), fork()', () => {
     withScope(scope, () => {
       node('process', () => {
         action(actionFn);
-        fork(cond, 'next', { label: 'ok' });
-        fork(undefined, 'fallback');
+        fork('ok', target('next'), cond);
+        fork('fallback', target('fallback'));
       });
       node('next', terminal());
       node('fallback', terminal());
@@ -232,9 +232,10 @@ describe('action(), fork()', () => {
     const def = scope.nodes['process'] as any;
     expect(def.action).toBe(actionFn);
     expect(def.forks).toHaveLength(2);
-    expect(def.forks[0].condition).toBe(cond);
-    expect(def.forks[0].target).toBe('next');
     expect(def.forks[0].label).toBe('ok');
+    expect(def.forks[0].target).toBe('next');
+    expect(def.forks[0].condition).toBe(cond);
+    expect(def.forks[1].label).toBe('fallback');
     expect(def.forks[1].target).toBe('fallback');
   });
 });

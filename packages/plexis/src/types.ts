@@ -477,7 +477,10 @@ export type DefinePipelineOptions<
 
 // ─── Target Sentinel ─────────────────────────────────────────────────────────
 
-export type TargetDef = { __type: 'TargetDef'; id: string };
+export type TargetDef =
+  | { __type: 'TargetDef'; id: string }
+  // pipeline: Pipeline<any> — intentional type erasure; the sentinel carries a reference only
+  | { __type: 'TargetDef'; pipeline: Pipeline<any> };
 export type OnSetupFn = () => TargetDef;
 export type OnGuardInput = { event: string; payload?: unknown; traceId: string };
 
@@ -493,7 +496,8 @@ export type PlexisErrorCode =
   | 'UNKNOWN_NODE'
   | 'BUILDER_CLOSED'
   | 'DUPLICATE_REGISTRATION'
-  | 'MISSING_TARGET';
+  | 'MISSING_TARGET'
+  | 'INVALID_TARGET';
 
 // ─── Terminal Sentinel ───────────────────────────────────────────────────────
 
@@ -541,7 +545,7 @@ export declare function on<TContext extends object>(
   def: TargetDef | OnSetupFn
 ): void;
 
-export declare function target(id: string): TargetDef;
+export declare function target<TContext extends object>(idOrPipeline: string | Pipeline<TContext>): TargetDef;
 
 export declare function guard<TContext extends object>(
   fn: (ctx: TContext, input: OnGuardInput) => boolean | Promise<boolean>
@@ -564,11 +568,9 @@ export declare function action<TContext extends object>(
 ): void;
 
 export declare function fork<TContext extends object>(
-  condition:
-    | ((ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>)
-    | undefined,
-  target: string | Pipeline<TContext>,
-  options?: { label?: string; metadata?: Record<string, unknown> }
+  label: string,
+  target: TargetDef,
+  condition?: (ctx: TContext, input: PipelineConditionInput) => boolean | Promise<boolean>
 ): void;
 
 export declare function terminal<TContext extends object>(
@@ -668,4 +670,5 @@ export declare class PlexisError extends Error {
   static builderClosed(helperName: string): PlexisError;
   static duplicateRegistration(event: string, helper: string): PlexisError;
   static missingTarget(event: string): PlexisError;
+  static invalidTarget(helperName: string, detail: string): PlexisError;
 }

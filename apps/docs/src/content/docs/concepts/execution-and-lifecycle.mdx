@@ -61,13 +61,13 @@ Every call to `pipeline.run(context, input?)` follows this loop:
 6. **Return `PipelineRunResult`** — status is `'completed'` if a terminal was reached, `'stopped'` if no fork matched.
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 const process = definePipeline('process', () => {
   node('validate', () => {
     action(async (ctx) => ({ validated: true }));
-    fork((ctx) => ctx.validated && ctx.amount > 0, 'charge', { label: 'valid' });
-    fork((ctx) => !ctx.validated || ctx.amount <= 0, 'reject', { label: 'invalid' });
+    fork('valid', target('charge'), (ctx) => ctx.validated && ctx.amount > 0);
+    fork('invalid', target('reject'), (ctx) => !ctx.validated || ctx.amount <= 0);
   });
   node('charge', terminal());
   node('reject', terminal());

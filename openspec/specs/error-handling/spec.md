@@ -30,7 +30,7 @@ The library SHALL export `PlexisError`, a subclass of `Error` with a required `c
 
 #### Scenario: Repeated `fork` in a node does not throw DUPLICATE_REGISTRATION
 
-- **WHEN** a `node('validate-card', () => { fork(c1, 'a'); fork(c2, 'b'); })` setup declares two forks
+- **WHEN** a `node('validate-card', () => { fork('to-a', target('a'), c1); fork('to-b', target('b'), c2); })` setup declares two forks
 - **THEN** neither `fork` call SHALL throw, and both branches SHALL be registered in declaration order
 
 ### Requirement: `MISSING_TARGET` when an `on` setup function returns no `target()`
@@ -49,7 +49,7 @@ When an `on(event, setupFn)` setup function runs to completion without returning
 
 ### Requirement: Documented error codes
 
-`PlexisError.code` SHALL be one of the documented codes: `UNKNOWN_EVENT`, `STATE_MISMATCH`, `UNKNOWN_INITIAL_STATE`, `UNKNOWN_INITIAL_NODE`, `UNKNOWN_TARGET_STATE`, `UNKNOWN_TARGET_NODE`, `UNKNOWN_NODE`, `BUILDER_CLOSED`, `DUPLICATE_REGISTRATION`, `MISSING_TARGET`. The library SHALL NOT throw `PlexisError` with an undocumented `code`.
+`PlexisError.code` SHALL be one of the documented codes: `UNKNOWN_EVENT`, `STATE_MISMATCH`, `UNKNOWN_INITIAL_STATE`, `UNKNOWN_INITIAL_NODE`, `UNKNOWN_TARGET_STATE`, `UNKNOWN_TARGET_NODE`, `UNKNOWN_NODE`, `BUILDER_CLOSED`, `DUPLICATE_REGISTRATION`, `MISSING_TARGET`, `INVALID_TARGET`. The library SHALL NOT throw `PlexisError` with an undocumented `code`.
 
 #### Scenario: Each documented failure maps to its declared code
 

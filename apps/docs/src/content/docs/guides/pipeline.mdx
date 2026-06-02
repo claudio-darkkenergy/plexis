@@ -12,7 +12,7 @@ A **Pipeline** models a finite, single-run workflow. Execution starts at the ini
 Use `definePipeline()` to create a pipeline. The setup function registers nodes using the `node()` helper and must return `{ initial }` naming the first node to execute.
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type PaymentContext = { cardValid: boolean; amount: number };
 
@@ -22,8 +22,8 @@ const payment = definePipeline<PaymentContext>('payment', () => {
       const ok = ctx.cardValid && ctx.amount > 0;
       return { validated: ok };
     });
-    fork((ctx) => ctx.cardValid, 'charge', { label: 'card-ok' });
-    fork((ctx) => !ctx.cardValid, 'decline', { label: 'card-invalid' });
+    fork('card-ok', target('charge'), (ctx) => ctx.cardValid);
+    fork('card-invalid', target('decline'), (ctx) => !ctx.cardValid);
   });
 
   node('charge', terminal());
@@ -40,7 +40,7 @@ Register nodes with `node(id, fn | terminal(fn?))`. The setup function calls sco
 | Helper | Description |
 | --- | --- |
 | `action(fn)` | Runs when the node executes; return value merges into context |
-| `fork(cond, target, opts?)` | Register an ordered forward transition |
+| `fork(label, target, cond?)` | Register an ordered forward transition |
 
 Pass `terminal()` or `terminal(fn)` as the second argument to register a terminal node with an optional final action.
 
@@ -64,17 +64,17 @@ Returning `undefined`, `null`, or `void` leaves the context unchanged.
 Forks define ordered forward transitions. The **first** fork whose condition returns `true` is taken; remaining forks are not evaluated (first-match-wins).
 
 ```typescript
-fork(condition, target, options?)
+fork(label, target, condition?)
 ```
 
 See [`fork`](/reference/registration-helpers#fork) for the complete parameter reference.
 
-A fork with `condition: undefined` is an unconditional forward edge:
+A fork with no `condition` always matches, making it a catch-all:
 
 ```typescript
 node('route', () => {
-  fork((ctx) => ctx.amount > 1000, 'high-value');
-  fork(undefined, 'standard');  // default path
+  fork('high-value', target('high-value'), (ctx) => ctx.amount > 1000);
+  fork('standard', target('standard'));  // default path
 });
 ```
 
@@ -111,7 +111,7 @@ A fork target can be another `Pipeline` instance. When the fork is taken, the su
 const enrichment = definePipeline('enrichment', () => {
   node('fetch-geo', () => {
     action(async () => ({ geo: 'US' }));
-    fork(undefined, 'done');
+    fork('next', target('done'));
   });
   node('done', terminal());
   return { initial: 'fetch-geo' };
@@ -119,7 +119,7 @@ const enrichment = definePipeline('enrichment', () => {
 
 const main = definePipeline('main', () => {
   node('start', () => {
-    fork(undefined, enrichment);
+    fork('enrich', target(enrichment));
   });
   node('finish', terminal());
   return { initial: 'start' };

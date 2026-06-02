@@ -2,16 +2,20 @@
  * Order Domain Example
  *
  * Domain-level state machine for an e-commerce order lifecycle.
- * Demonstrates: defineDomain, definePipeline, state, edge, node, fork, terminal,
- * createTracer, guard, edge action, attached edge pipeline, onEnter lifecycle hook,
- * follow, can, followFrom (STATE_MISMATCH), snapshot/restore, history, trace.
+ * Demonstrates: defineDomain, definePipeline, when, on, enter, target, guard,
+ * node, action, fork, terminal, createTracer, follow, can, snapshot/restore, history, trace.
  */
 import {
   defineDomain,
   definePipeline,
-  state,
-  edge,
+  when,
+  on,
+  enter,
+  target,
+  guard,
+  pipeline,
   node,
+  action,
   fork,
   terminal,
   createTracer,
@@ -33,23 +37,16 @@ interface OrderCtx {
 const tracer = createTracer({ captureContext: 'after' });
 
 const validationPipeline = definePipeline<OrderCtx>('order-validation', () => {
-  node('validate-order', {
-    action: async (ctx) => ({
+  node('validate-order', () => {
+    action(async (ctx: OrderCtx) => ({
       validOrder: Boolean(ctx.orderId && ctx.items?.length),
-    }),
-    forks: [
-      fork((ctx) => ctx.validOrder === true, 'check-payment', { label: 'valid' }),
-      fork(undefined, 'reject', { label: 'invalid' }),
-    ],
+    }));
+    fork('valid', target('check-payment'), (ctx: OrderCtx) => ctx.validOrder === true);
+    fork('invalid', target('reject'));
   });
 
-  node('check-payment', terminal({
-    action: async () => ({ paymentReady: true }),
-  }));
-
-  node('reject', terminal({
-    action: async () => ({ rejected: true }),
-  }));
+  node('check-payment', terminal(async () => ({ paymentReady: true })));
+  node('reject',        terminal(async () => ({ rejected: true })));
 
   return { initial: 'validate-order' };
 }, { tracer });
@@ -57,27 +54,23 @@ const validationPipeline = definePipeline<OrderCtx>('order-validation', () => {
 // ─── Domain: order lifecycle ──────────────────────────────────────────────────
 
 const orderDomain = defineDomain<OrderCtx>('order', () => {
-  state('pending', {
-    edges: {
-      SUBMIT: edge({
-        target: 'processing',
-        guard: (ctx) => Boolean(ctx.orderId),
-        action: async (_ctx, ev) => ({
-          submittedBy: (ev.payload as { userId: string })?.userId,
-        }),
-        pipeline: validationPipeline,
-      }),
-    },
+  when('pending', () => {
+    on('submit', () => {
+      guard((ctx: OrderCtx) => Boolean(ctx.orderId));
+      action(async (_ctx, ev) => ({
+        submittedBy: (ev.payload as { userId: string })?.userId,
+      }));
+      pipeline(validationPipeline);
+      return target('processing');
+    });
   });
 
-  state('processing', {
-    onEnter: async () => ({ processingStartedAt: Date.now() }),
-    edges: {
-      COMPLETE: edge({ target: 'done' }),
-    },
+  when('processing', () => {
+    enter(async () => ({ processingStartedAt: Date.now() }));
+    on('complete', target('done'));
   });
 
-  state('done', { terminal: true, edges: {} });
+  when('done', terminal());
 
   return {
     context: { orderId: 'ORD-001', items: [{ sku: 'ABC', qty: 1 }] },
@@ -96,7 +89,7 @@ async function main() {
   const snapBeforeSubmit = orderDomain.snapshot();
 
   // Follow SUBMIT
-  const submitResult = await orderDomain.follow('SUBMIT', { userId: 'u_1' });
+  const submitResult = await orderDomain.follow('submit', { userId: 'u_1' });
   console.log('\nAfter SUBMIT:');
   console.log('  follow result status:', submitResult.status);   // followed
   console.log('  current state:', orderDomain.state);            // processing
@@ -105,7 +98,7 @@ async function main() {
   // followFrom with wrong state → STATE_MISMATCH
   console.log('\n--- followFrom (wrong state) ---');
   try {
-    await orderDomain.followFrom('pending', 'SUBMIT', { userId: 'u_2' });
+    await orderDomain.followFrom('pending', 'submit', { userId: 'u_2' });
   } catch (err) {
     if (err instanceof PlexisError) {
       console.log('Caught PlexisError code:', err.code); // STATE_MISMATCH
@@ -114,10 +107,10 @@ async function main() {
 
   // Use current proxy — can + follow
   console.log('\n--- current proxy ---');
-  const canComplete = await orderDomain.current.can('COMPLETE');
+  const canComplete = await orderDomain.current.can('complete');
   console.log('can COMPLETE:', canComplete); // true
   if (canComplete) {
-    await orderDomain.current.follow('COMPLETE');
+    await orderDomain.current.follow('complete');
   }
   console.log('Final state:', orderDomain.state); // done
 

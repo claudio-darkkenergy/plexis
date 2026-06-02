@@ -8,13 +8,13 @@ A fork target can be a `Pipeline` object instead of a node ID string. When a for
 ## Sub-pipeline as a fork target
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 // A small, reusable pipeline
 const notifyUser = definePipeline('notify-user', () => {
   node('send-email', () => {
     action(async (ctx) => ({ notified: true }));
-    fork(undefined, 'done');
+    fork('next', target('done'));
   });
   node('done', terminal());
   return { initial: 'send-email' };
@@ -24,8 +24,8 @@ const notifyUser = definePipeline('notify-user', () => {
 const onboard = definePipeline('onboard', () => {
   node('create-account', () => {
     action(async (ctx) => ({ accountCreated: true }));
-    fork((ctx) => ctx.accountCreated, notifyUser);
-    fork((ctx) => !ctx.accountCreated, 'fail');
+    fork('notify', target(notifyUser), (ctx) => ctx.accountCreated);
+    fork('fail', target('fail'), (ctx) => !ctx.accountCreated);
   });
   node('fail', terminal());
   return { initial: 'create-account' };
@@ -49,7 +49,7 @@ import { definePipeline, defineDomain, when, on, node, fork, terminal } from '@t
 const sendReceipt = definePipeline('send-receipt', () => {
   node('email', () => {
     action(async (ctx) => ({ receiptSent: true }));
-    fork(undefined, 'done');
+    fork('next', target('done'));
   });
   node('done', terminal());
   return { initial: 'email' };
@@ -59,7 +59,7 @@ const sendReceipt = definePipeline('send-receipt', () => {
 const checkout = definePipeline('checkout', () => {
   node('charge', () => {
     action(async (ctx) => ({ charged: true }));
-    fork((ctx) => ctx.charged, sendReceipt);
+    fork('receipt', target(sendReceipt), (ctx) => ctx.charged);
   });
   return { initial: 'charge' };
 });
@@ -81,14 +81,14 @@ const order = defineDomain('order', () => {
 Context is passed into the parent pipeline's `run()`, merged as each node action runs, and passed into the sub-pipeline's `run()` when the fork triggers it. The sub-pipeline's final context becomes the parent's context for any subsequent nodes.
 
 ```typescript
-import { definePipeline, node, action, fork, terminal } from '@tde.io/plexis';
+import { definePipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 type Ctx = { amount: number; taxed: boolean; total: number };
 
 const applyTax = definePipeline<Ctx>('apply-tax', () => {
   node('tax', () => {
     action(async (ctx) => ({ taxed: true, total: ctx.amount * 1.1 }));
-    fork(undefined, 'done');
+    fork('next', target('done'));
   });
   node('done', terminal());
   return { initial: 'tax' };
@@ -97,7 +97,7 @@ const applyTax = definePipeline<Ctx>('apply-tax', () => {
 const invoice = definePipeline<Ctx>('invoice', () => {
   node('validate', () => {
     action(async (ctx) => ({ amount: 100 }));
-    fork((ctx) => ctx.amount > 0, applyTax);
+    fork('apply-tax', target(applyTax), (ctx) => ctx.amount > 0);
   });
   return { initial: 'validate' };
 });
