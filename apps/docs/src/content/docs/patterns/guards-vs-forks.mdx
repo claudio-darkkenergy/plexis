@@ -1,13 +1,13 @@
 ---
 title: Guards vs Forks
-description: Know when to block a domain transition with a guard and when to route pipeline flow with a fork — two different tools for two different layers.
+description: Know when to block a domain event with a guard and when to route pipeline flow with a fork — two different tools for two different layers.
 ---
 
-Guards and forks both involve a boolean condition, but they live at different layers and have different effects. A **guard** stops a domain transition; a **fork** routes a pipeline to a branch. Choosing the right one is mostly about which layer owns the decision.
+Guards and forks both involve a boolean condition, but they live at different layers and have different effects. A **guard** stops a domain event; a **fork** routes a pipeline to a branch. Choosing the right one is mostly about which layer owns the decision.
 
-## Guards — blocking a domain transition
+## Guards — blocking a domain event
 
-A guard lives on a flow (`OnDef.guard`) and is evaluated before any side effects run. If it returns `false`, the event is blocked: no `exit`, no action, no pipeline, no state change, no history entry. The domain stays exactly where it was.
+A guard lives on an event (`OnDef.guard`) and is evaluated before any side effects run. If it returns `false`, the event is blocked: no `exit`, no action, no pipeline, no phase change, no history entry. The domain stays exactly where it was.
 
 ```typescript
 import { defineDomain, when, on, terminal } from '@tde.io/plexis';
@@ -17,7 +17,7 @@ type Ctx = { balance: number; amount: number };
 const account = defineDomain<Ctx>('account', () => {
   when('open', () => {
     on('withdraw', () => {
-      // Guard: block the transition entirely if there are insufficient funds
+      // Guard: block the event entirely if there are insufficient funds
       guard(async (ctx) => ctx.balance >= ctx.amount);
       action(async (ctx) => ({ balance: ctx.balance - ctx.amount }));
       return target('open');
@@ -30,7 +30,7 @@ const result = await account.follow('withdraw');
 // result.status === 'blocked' — guard returned false, nothing ran
 ```
 
-The `DomainFollowResult.status` will be `'blocked'` when a guard rejects the transition.
+The `DomainFollowResult.status` will be `'blocked'` when a guard rejects the event.
 
 ## Forks — routing pipeline flow
 
@@ -64,18 +64,18 @@ const result = await process.run({ amount: 150, fundsSufficient: false });
 |---|---|
 | Block a domain event before any side effects run | Guard |
 | Route a pipeline to a success or failure branch | Fork |
-| The decision is about "can this transition happen at all?" | Guard |
+| The decision is about "can this event happen at all?" | Guard |
 | The decision is about "what should happen next in this workflow?" | Fork |
-| The entity stays in the same state when denied | Guard |
+| The entity stays in the same phase when denied | Guard |
 | The workflow always ends at some terminal | Fork |
 
-**Guards protect domain integrity.** They are the right place for invariants that must hold before a state change is allowed — balance checks, role checks, status pre-conditions.
+**Guards protect domain integrity.** They are the right place for invariants that must hold before a phase change is allowed — balance checks, role checks, status pre-conditions.
 
 **Forks encode workflow logic.** They are the right place for conditional routing that should be captured in the audit trail, traced, and part of the pipeline's declared graph.
 
 ## Can I use both?
 
-Yes. A domain edge can have a `guard` *and* a `pipeline`. If the guard passes, the pipeline runs as part of the transition. Inside that pipeline, forks route the work.
+Yes. A domain event can have a `guard` *and* a `pipeline`. If the guard passes, the pipeline runs as part of the event. Inside that pipeline, forks route the work.
 
 ```typescript
 import { defineDomain, definePipeline, when, on, target, guard, pipeline, enter, exit, node, action, fork, terminal } from '@tde.io/plexis';

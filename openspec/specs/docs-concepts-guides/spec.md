@@ -24,12 +24,12 @@ Concepts pages SHALL be framed as cross-cutting mental models — the "why" behi
 
 ### Requirement: Two-layer model page contrasts Domain and Pipeline
 
-`two-layer-model.mdx` SHALL explain Domain as durable business state that persists across time and Pipeline as a finite workflow that runs once per invocation, and SHALL give the reader a rule for choosing which layer to reach for.
+`two-layer-model.mdx` SHALL explain Domain as a durable flow that persists across time and Pipeline as a finite workflow that runs once per invocation, and SHALL give the reader a rule for choosing which layer to reach for.
 
 #### Scenario: Page frames the choice between layers
 
 - **WHEN** a reader inspects `two-layer-model.mdx`
-- **THEN** it describes Domain as durable cross-time state and Pipeline as a run-once finite workflow
+- **THEN** it describes Domain as a durable flow across time (with phases and events) and Pipeline as a run-once finite workflow
 - **AND** it states when to use a Domain versus a Pipeline
 
 ### Requirement: Context and patches page explains immutability and the patch model
@@ -44,13 +44,19 @@ Concepts pages SHALL be framed as cross-cutting mental models — the "why" behi
 
 ### Requirement: Execution and lifecycle page documents the runtime order
 
-`execution-and-lifecycle.mdx` SHALL describe the ordered steps the runtime takes on `domain.follow()` (guard → onExit → edge action → edge pipeline → transition → onEnter → entry pipeline → history/subscribers) and the pipeline run loop (start at initial → action → evaluate forks first-match-wins → follow target → repeat until terminal), and SHALL indicate where side effects safely belong.
+`execution-and-lifecycle.mdx` SHALL describe the ordered steps the runtime takes on `domain.follow()` (guard → `exit` → `on` action → `on` pipeline → phase change → `enter` → phase entry pipeline → history/subscribers) and the pipeline run loop (start at initial → action → evaluate forks first-match-wins → follow target → repeat until terminal), and SHALL indicate where side effects safely belong. The page SHALL describe the `on` action as registered by the ambient `action(fn)` helper called inside the `on` setup function, and SHALL NOT show any `on(event, { ... })` object form or imply that `action`/`guard`/`pipeline` are injected arguments. The page SHALL use the flow/phase/event vocabulary and SHALL NOT use "state" or "transition" for a domain position or move.
 
 #### Scenario: Page presents the follow and run order
 
 - **WHEN** a reader inspects `execution-and-lifecycle.mdx`
-- **THEN** it lists the ordered domain `follow()` steps and the pipeline run loop
+- **THEN** it lists the ordered domain `follow()` steps (guard, `exit`, `on` action, `on` pipeline, phase change, `enter`, phase entry pipeline, history/subscribers) and the pipeline run loop
 - **AND** it indicates where side effects should be placed in that order
+
+#### Scenario: Page describes the `on` action accurately and in phase/event terms
+
+- **WHEN** a reader inspects how the `on` action is registered on `execution-and-lifecycle.mdx`
+- **THEN** the page shows the ambient `action(fn)` helper called inside the `on` setup function
+- **AND** it contains no `on(event, { action })` object form, no injected-argument (`({ action }) => ...`) form, and no use of "state" or "transition" for a domain position or move
 
 ### Requirement: Definition lifecycle page explains synchronous setup and builder scope
 

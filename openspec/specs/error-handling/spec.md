@@ -35,7 +35,7 @@ The library SHALL export `PlexisError`, a subclass of `Error` with a required `c
 
 ### Requirement: `MISSING_TARGET` when an `on` setup function returns no `target()`
 
-When an `on(event, setupFn)` setup function runs to completion without returning a `target()` value, the library SHALL throw `PlexisError` with `code === 'MISSING_TARGET'`. This is distinct from `BUILDER_CLOSED`: the builder scope was valid and the setup ran, but its required contract — returning a transition destination — was not honored. The error message SHALL name the event and direct the author to `return target('state-id')` as the last statement of the setup function.
+When an `on(event, setupFn)` setup function runs to completion without returning a `target()` value, the library SHALL throw `PlexisError` with `code === 'MISSING_TARGET'`. This is distinct from `BUILDER_CLOSED`: the builder scope was valid and the setup ran, but its required contract — returning a phase destination — was not honored. The error message SHALL name the event and direct the author to `return target('phase-id')` as the last statement of the setup function.
 
 #### Scenario: `on` setup function with no returned target throws MISSING_TARGET
 
@@ -49,12 +49,17 @@ When an `on(event, setupFn)` setup function runs to completion without returning
 
 ### Requirement: Documented error codes
 
-`PlexisError.code` SHALL be one of the documented codes: `UNKNOWN_EVENT`, `STATE_MISMATCH`, `UNKNOWN_INITIAL_STATE`, `UNKNOWN_INITIAL_NODE`, `UNKNOWN_TARGET_STATE`, `UNKNOWN_TARGET_NODE`, `UNKNOWN_NODE`, `BUILDER_CLOSED`, `DUPLICATE_REGISTRATION`, `MISSING_TARGET`, `INVALID_TARGET`. The library SHALL NOT throw `PlexisError` with an undocumented `code`.
+`PlexisError.code` SHALL be one of the documented codes: `UNKNOWN_EVENT`, `PHASE_MISMATCH`, `UNKNOWN_INITIAL_PHASE`, `UNKNOWN_INITIAL_NODE`, `UNKNOWN_TARGET_PHASE`, `UNKNOWN_TARGET_NODE`, `UNKNOWN_NODE`, `BUILDER_CLOSED`, `DUPLICATE_REGISTRATION`, `MISSING_TARGET`, `INVALID_TARGET`. The library SHALL NOT throw `PlexisError` with an undocumented `code`. The phase-related codes are renamed from `STATE_MISMATCH`, `UNKNOWN_INITIAL_STATE`, and `UNKNOWN_TARGET_STATE`.
 
-#### Scenario: Each documented failure maps to its declared code
+#### Scenario: Only documented codes are thrown
 
-- **WHEN** the library encounters an unknown initial state at Domain construction
-- **THEN** the thrown error SHALL have `code === 'UNKNOWN_INITIAL_STATE'`
+- **WHEN** any `PlexisError` is thrown by the library
+- **THEN** its `code` SHALL be one of the documented codes and SHALL NOT be `STATE_MISMATCH`, `UNKNOWN_INITIAL_STATE`, or `UNKNOWN_TARGET_STATE`
+
+#### Scenario: Unknown initial phase maps to UNKNOWN_INITIAL_PHASE
+
+- **WHEN** the library encounters an unknown initial phase at Domain construction
+- **THEN** the thrown error SHALL have `code === 'UNKNOWN_INITIAL_PHASE'`
 
 #### Scenario: Duplicate single-slot registration maps to DUPLICATE_REGISTRATION
 
@@ -101,8 +106,8 @@ When a Domain is constructed with `strict: true`, calling `follow(unknownEvent)`
 
 #### Scenario: Strict mode throws on unknown event
 
-- **WHEN** `domain.follow('UNKNOWN')` is called on a Domain with `strict: true` whose current state declares no edge for `'UNKNOWN'`
-- **THEN** the call SHALL throw `PlexisError` with `code === 'UNKNOWN_EVENT'`, `domainId` matching the Domain id, and the offending state recorded
+- **WHEN** `domain.follow('unknown')` is called on a Domain with `strict: true` whose current phase declares no `on` handler for `'unknown'`
+- **THEN** the call SHALL throw `PlexisError` with `code === 'UNKNOWN_EVENT'`, `domainId` matching the Domain id, and the offending phase recorded
 
 #### Scenario: Non-strict mode ignores unknown event
 
@@ -111,21 +116,21 @@ When a Domain is constructed with `strict: true`, calling `follow(unknownEvent)`
 
 ### Requirement: Construction-time validation always throws
 
-Structural errors detected at construction (`UNKNOWN_INITIAL_STATE`, `UNKNOWN_INITIAL_NODE`, `UNKNOWN_TARGET_STATE`, `UNKNOWN_TARGET_NODE`, `UNKNOWN_NODE`) SHALL throw `PlexisError` regardless of `strict` mode. These are not runtime decisions and cannot be silently ignored.
+Structural errors detected at construction (`UNKNOWN_INITIAL_PHASE`, `UNKNOWN_INITIAL_NODE`, `UNKNOWN_TARGET_PHASE`, `UNKNOWN_TARGET_NODE`, `UNKNOWN_NODE`) SHALL throw `PlexisError` regardless of `strict` mode. These are not runtime decisions and cannot be silently ignored.
 
-#### Scenario: Unknown target state throws at construction even in non-strict mode
+#### Scenario: Unknown target phase throws at construction even in non-strict mode
 
-- **WHEN** a Domain is constructed with `strict: false` and an edge whose `target: 'missing'` does not reference an existing state
-- **THEN** construction SHALL throw `PlexisError` with `code === 'UNKNOWN_TARGET_STATE'`
+- **WHEN** a Domain is constructed with `strict: false` and an `on` handler whose `target: 'missing'` does not reference an existing phase
+- **THEN** construction SHALL throw `PlexisError` with `code === 'UNKNOWN_TARGET_PHASE'`
 
-### Requirement: `followFrom` throws `STATE_MISMATCH`
+### Requirement: `followFrom` throws `PHASE_MISMATCH`
 
-`domain.followFrom(expectedState, event, payload?)` SHALL throw `PlexisError` with `code === 'STATE_MISMATCH'` when the Domain's current state does not equal `expectedState`. The error SHALL carry `domainId`, the expected state, and the actual state.
+`domain.followFrom(expectedPhase, event, payload?)` SHALL throw `PlexisError` with `code === 'PHASE_MISMATCH'` when the Domain's current phase does not equal `expectedPhase`. The error SHALL carry `domainId`, the expected phase, and the actual phase.
 
-#### Scenario: followFrom on the wrong state throws STATE_MISMATCH
+#### Scenario: followFrom on the wrong phase throws PHASE_MISMATCH
 
-- **WHEN** the Domain's current state is `'pending'` and `followFrom('processing', 'COMPLETE')` is called
-- **THEN** the call SHALL throw `PlexisError` with `code === 'STATE_MISMATCH'`, the `domainId` set, and both the expected and actual state values recoverable from the error
+- **WHEN** the Domain's current phase is `'pending'` and `followFrom('processing', 'complete')` is called
+- **THEN** the call SHALL throw `PlexisError` with `code === 'PHASE_MISMATCH'`, the `domainId` set, and both the expected and actual phase values recoverable from the error
 
 ### Requirement: Pipeline error policies
 

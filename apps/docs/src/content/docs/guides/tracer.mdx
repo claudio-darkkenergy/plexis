@@ -27,7 +27,7 @@ Pass the tracer in the options object when defining a domain or pipeline:
 ```typescript
 import {
   defineDomain, definePipeline,
-  when, edge, node, terminal,
+  when, on, node, target, terminal,
   createTracer,
 } from '@tde.io/plexis';
 
@@ -56,8 +56,8 @@ Each event has a `level` identifying which subsystem emitted it:
 | Level | Emitted by |
 | --- | --- |
 | `'domain'` | `follow()` start/end |
-| `'state'` | State entry and exit |
-| `'edge'` | Edge selection and traversal |
+| `'phase'` | Phase entry and exit |
+| `'edge'` | Domain event traversal |
 | `'pipeline'` | Pipeline `run()` start/end |
 | `'pipeline-node'` | Individual node execution |
 | `'fork'` | Fork condition evaluation and selection |

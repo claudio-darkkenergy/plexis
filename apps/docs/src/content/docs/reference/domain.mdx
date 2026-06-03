@@ -3,32 +3,32 @@ title: Domain Instance
 description: Reference for Domain instance members and the DomainGraph query API.
 ---
 
-`Domain` — returned by `defineDomain()`. Represents a running state machine with durable context, history, and graph introspection.
+`Domain` — returned by `defineDomain()`. Represents a running flow with durable context, history, and graph introspection.
 
 ## Properties
 
 | Property | Type | Description |
 | --- | --- | --- |
 | `id` | `string` | Domain identifier |
-| `state` | `string` | Current state ID |
-| `context` | `TContext` | Current context (immutable; updated via transitions) |
-| `current` | `CurrentStateNode<TContext, TEdges>` | Scoped view of the current state; see below |
+| `phase` | `string` | Current phase ID |
+| `context` | `TContext` | Current context (immutable; updated via events) |
+| `current` | `CurrentPhaseNode<TContext, TEdges>` | Scoped view of the current phase; see below |
 | `graph` | `DomainGraph` | Graph query API; see [DomainGraph methods](#domaingraph-methods) |
 
-`CurrentStateNode` fields:
+`CurrentPhaseNode` fields:
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `state` | `string` | Current state ID |
+| `phase` | `string` | Current phase ID |
 | `context` | `TContext` | Current context |
-| `can(event, payload?)` | `(event: TEdges, payload?: unknown) => boolean \| Promise<boolean>` | Check if a transition is allowed |
-| `follow(event, payload?)` | `(event: TEdges, payload?: unknown) => Promise<DomainFollowResult>` | Trigger a transition |
+| `can(event, payload?)` | `(event: TEdges, payload?: unknown) => boolean \| Promise<boolean>` | Check if an event is allowed |
+| `follow(event, payload?)` | `(event: TEdges, payload?: unknown) => Promise<DomainFollowResult>` | Follow an event |
 
 ---
 
 ## `domain.follow(event, payload?)`
 
-Trigger a state transition.
+Follow a domain event.
 
 ### Parameters
 
@@ -47,7 +47,7 @@ Optional event payload passed to guards, actions, and hooks.
 ### Example
 
 ```typescript
-import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+import { defineDomain, when, on, target, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
@@ -59,20 +59,20 @@ const order = defineDomain('order', () => {
 
 const result = await order.follow('submit', { userId: 'u1' });
 console.log(result.status); // 'followed'
-console.log(order.state);   // 'processing'
+console.log(order.phase);   // 'processing'
 ```
 
 ---
 
-## `domain.followFrom(state, event, payload?)`
+## `domain.followFrom(expectedPhase, event, payload?)`
 
-Trigger a transition from a specific state. Throws `STATE_MISMATCH` if the current state does not match.
+Follow a domain event from a specific phase. Throws `PHASE_MISMATCH` if the current phase does not match.
 
 ### Parameters
 
-**`state`** `string`
+**`expectedPhase`** `string`
 
-Expected current state ID.
+Expected current phase ID.
 
 **`event`** `TEdges`
 
@@ -97,7 +97,7 @@ const result = await order.followFrom('pending', 'submit');
 
 ## `domain.can(event, payload?)`
 
-Check if a transition is allowed without running any side effects.
+Check if an event is allowed without running any side effects.
 
 ### Parameters
 
@@ -126,13 +126,13 @@ if (allowed) {
 
 ## `domain.subscribe(listener)`
 
-Subscribe to state changes. The listener is called after each successful transition.
+Subscribe to phase changes. The listener is called after each successful event.
 
 ### Parameters
 
 **`listener`** `(snapshot: DomainSnapshot<TContext>) => void`
 
-Called after each successful transition.
+Called after each successful event.
 
 ### Return value
 
@@ -142,7 +142,7 @@ Called after each successful transition.
 
 ```typescript
 const unsubscribe = order.subscribe((snapshot) => {
-  console.log('transitioned to:', snapshot.state);
+  console.log('moved to:', snapshot.phase);
   console.log('context:', snapshot.context);
 });
 
@@ -156,7 +156,7 @@ unsubscribe();
 
 ## `domain.snapshot()`
 
-Capture the current state, context, and history length.
+Capture the current phase, context, and history length.
 
 ### Return value
 
@@ -166,7 +166,7 @@ Capture the current state, context, and history length.
 
 ```typescript
 const snap = order.snapshot();
-// { state: 'pending', context: { orderId: 'o1' }, historyLength: 0 }
+// { phase: 'pending', context: { orderId: 'o1' }, historyLength: 0 }
 ```
 
 ---
@@ -193,14 +193,14 @@ await order.follow('submit');
 
 // Roll back:
 order.restore(snap);
-console.log(order.state); // 'pending'
+console.log(order.phase); // 'pending'
 ```
 
 ---
 
 ## `domain.history()`
 
-Return all recorded transitions.
+Return all recorded events.
 
 ### Return value
 
@@ -318,6 +318,6 @@ const edges = graph.outbound('pending');
 const paths = graph.pathsFrom('pending', { maxDepth: 3 });
 const reachable = graph.reachableFrom('pending');
 
-// Runtime-observed queries (populated after transitions run):
+// Runtime-observed queries (populated after events run):
 const observedPaths = graph.observedPathsFrom('pending');
 ```

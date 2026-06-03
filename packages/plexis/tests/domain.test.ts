@@ -1,10 +1,9 @@
 // covers: specs/domain/spec.md, specs/error-handling/spec.md
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { Domain, defineDomain } from '../src/core/domain.js';
-import { PlexisError } from '../src/core/errors.js';
 import { when, enter, exit, on, target, guard, pipeline, terminal } from '../src/core/helpers.js';
 import { definePipeline } from '../src/core/pipeline.js';
-import { node, action, fork } from '../src/core/helpers.js';
+import { node, action } from '../src/core/helpers.js';
 import type { ActionInput } from '../src/types.js';
 
 // ─── Construction ──────────────────────────────────────────────────────────
@@ -22,31 +21,31 @@ describe('defineDomain and new Domain parity', () => {
     expect(JSON.stringify(d1.describe())).toBe(JSON.stringify(d2.describe()));
   });
 
-  it('start in the same initial state', () => {
+  it('start in the same initial phase', () => {
     const d1 = defineDomain('order', setup);
     const d2 = new Domain('order', setup);
-    expect(d1.state).toBe(d2.state);
-    expect(d1.state).toBe('pending');
+    expect(d1.phase).toBe(d2.phase);
+    expect(d1.phase).toBe('pending');
   });
 });
 
 describe('construction validation', () => {
-  it('throws UNKNOWN_INITIAL_STATE for missing initial state', () => {
+  it('throws UNKNOWN_INITIAL_PHASE for missing initial phase', () => {
     expect(() =>
       defineDomain('d', () => {
         when('pending', () => {});
         return { context: {}, initial: 'missing' };
       })
-    ).toThrow(expect.objectContaining({ code: 'UNKNOWN_INITIAL_STATE' }));
+    ).toThrow(expect.objectContaining({ code: 'UNKNOWN_INITIAL_PHASE' }));
   });
 
-  it('throws UNKNOWN_TARGET_STATE for missing flow target in non-strict mode', () => {
+  it('throws UNKNOWN_TARGET_PHASE for missing event target in non-strict mode', () => {
     expect(() =>
       defineDomain('d', () => {
         when('pending', () => { on('go', target('gone')); });
         return { context: {}, initial: 'pending', strict: false };
       })
-    ).toThrow(expect.objectContaining({ code: 'UNKNOWN_TARGET_STATE' }));
+    ).toThrow(expect.objectContaining({ code: 'UNKNOWN_TARGET_PHASE' }));
   });
 });
 
@@ -60,7 +59,7 @@ describe('when() outside setup throws BUILDER_CLOSED', () => {
 
 // ─── follow() ───────────────────────────────────────────────────────────────
 
-describe('follow() — state transitions', () => {
+describe('follow() — phase transitions', () => {
   function makeOrder() {
     return defineDomain('order', () => {
       when('pending', () => { on('submit', target('processing')); });
@@ -70,12 +69,12 @@ describe('follow() — state transitions', () => {
     });
   }
 
-  it('successful follow returns status: followed and updates state', async () => {
+  it('successful follow returns status: followed and updates phase', async () => {
     const d = makeOrder();
     const result = await d.follow('submit');
     expect(result.status).toBe('followed');
     expect(result.to).toBe('processing');
-    expect(d.state).toBe('processing');
+    expect(d.phase).toBe('processing');
   });
 
   it('follow updates context via flow action', async () => {
@@ -116,7 +115,7 @@ describe('follow() — state transitions', () => {
     });
     const result = await d.follow('unknown');
     expect(result.status).toBe('ignored');
-    expect(d.state).toBe('a');
+    expect(d.phase).toBe('a');
   });
 
   it('unknown event in strict mode throws UNKNOWN_EVENT', async () => {
@@ -155,7 +154,7 @@ describe('guard evaluation', () => {
     });
     const result = await d.follow('go');
     expect(result.status).toBe('blocked');
-    expect(d.state).toBe('a');
+    expect(d.phase).toBe('a');
     expect(sideEffect).toBe(false);
   });
 });
@@ -231,21 +230,21 @@ describe('can()', () => {
     });
     const canResult = await d.can('go');
     expect(canResult).toBe(false);
-    expect(d.state).toBe('a');
+    expect(d.phase).toBe('a');
   });
 });
 
 // ─── followFrom() ────────────────────────────────────────────────────────────
 
 describe('followFrom()', () => {
-  it('throws STATE_MISMATCH when current state differs from expected', async () => {
+  it('throws PHASE_MISMATCH when current phase differs from expected', async () => {
     const d = defineDomain('order', () => {
       when('pending', () => { on('go', target('done')); });
       when('done', terminal());
       return { context: {}, initial: 'pending' };
     });
     await expect(d.followFrom('processing', 'go')).rejects.toThrow(
-      expect.objectContaining({ code: 'STATE_MISMATCH', domainId: 'order' })
+      expect.objectContaining({ code: 'PHASE_MISMATCH', domainId: 'order' })
     );
   });
 
@@ -263,7 +262,17 @@ describe('followFrom()', () => {
 // ─── snapshot / restore ───────────────────────────────────────────────────────
 
 describe('snapshot() / restore()', () => {
-  it('restore returns domain to captured state', async () => {
+  it('snapshot.phase equals domain.phase', () => {
+    const d = defineDomain('d', () => {
+      when('a', () => {});
+      return { context: {}, initial: 'a' };
+    });
+    const snap = d.snapshot();
+    expect(snap.phase).toBe('a');
+    expect(snap.phase).toBe(d.phase);
+  });
+
+  it('restore returns domain to captured phase', async () => {
     const d = defineDomain('d', () => {
       when('a', () => { on('go', target('b')); });
       when('b', () => {});
@@ -271,9 +280,9 @@ describe('snapshot() / restore()', () => {
     });
     const snap = d.snapshot();
     await d.follow('go');
-    expect(d.state).toBe('b');
+    expect(d.phase).toBe('b');
     d.restore(snap);
-    expect(d.state).toBe('a');
+    expect(d.phase).toBe('a');
     expect(d.context).toEqual({ x: 0 });
   });
 });
@@ -291,7 +300,7 @@ describe('subscribe()', () => {
     d.subscribe((snap) => snapshots.push(snap));
     await d.follow('go');
     expect(snapshots).toHaveLength(1);
-    expect((snapshots[0] as { state: string }).state).toBe('b');
+    expect((snapshots[0] as { phase: string }).phase).toBe('b');
   });
 
   it('throwing listener does not break subsequent listeners', async () => {
@@ -305,7 +314,7 @@ describe('subscribe()', () => {
     d.subscribe((snap) => received.push(snap));
     await d.follow('go');
     expect(received).toHaveLength(1);
-    expect(d.state).toBe('b');
+    expect(d.phase).toBe('b');
   });
 
   it('unsubscribe stops future notifications', async () => {
@@ -366,7 +375,7 @@ describe('flow pipeline integration', () => {
     });
     await d.follow('pay');
     expect(d.context).toMatchObject({ charged: true });
-    expect(d.state).toBe('done');
+    expect(d.phase).toBe('done');
   });
 });
 
@@ -412,7 +421,7 @@ describe('on() setup-function form — guard and pipeline drive follow correctly
       return { context: {}, initial: 'pending' };
     });
     await d.follow('submit', { orderId: 'abc' });
-    expect(d.state).toBe('done');
+    expect(d.phase).toBe('done');
     expect(d.context).toMatchObject({ charged: true });
     expect(capturedInput).toMatchObject({ source: 'submit', scope: 'pending', payload: { orderId: 'abc' }, traceId: expect.any(String) });
   });

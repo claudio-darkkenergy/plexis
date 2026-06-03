@@ -31,14 +31,14 @@ function createOrderDomain(orderId: string, userId: string) {
   });
 }
 
-// Each call returns an independent domain with its own state and context
+// Each call returns an independent domain with its own phase and context
 const orderA = createOrderDomain('ord_1', 'user_1');
 const orderB = createOrderDomain('ord_2', 'user_2');
 
 await orderA.follow('submit');
 
-console.log(orderA.state); // 'processing'
-console.log(orderB.state); // 'pending' — independent
+console.log(orderA.phase); // 'processing'
+console.log(orderB.phase); // 'pending' — independent
 ```
 
 ## A pipeline factory

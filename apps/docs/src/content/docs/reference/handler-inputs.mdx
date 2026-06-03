@@ -1,6 +1,6 @@
 ---
 title: Handler Input Types
-description: Reference for GuardInput, OnActionInput, StateHookInput, PipelineActionInput, and PipelineConditionInput.
+description: Reference for GuardInput, ActionInput, PhaseHookInput, and PipelineConditionInput.
 ---
 
 These types are passed as the second argument to guards, actions, hooks, and fork conditions.
@@ -73,28 +73,28 @@ const account = defineDomain<Ctx>('account', () => {
 
 ---
 
-## `StateHookInput`
+## `PhaseHookInput`
 
-Passed to `enter` and `exit` hooks: `enter(fn)` where `fn: (ctx, input: StateHookInput) => PatchLike`.
+Passed to `enter` and `exit` hooks: `enter(fn)` where `fn: (ctx, input: PhaseHookInput) => PatchLike`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `event` | `string` | No | Event that caused the state entry or exit; absent for the initial state entry |
+| `event` | `string` | No | Event that caused the phase entry or exit; absent for the initial phase entry |
 | `payload` | `unknown` | No | Optional event payload |
 | `traceId` | `string` | Yes | Active trace ID |
 
 ### Example
 
 ```typescript
-import { defineDomain, when, enter, on } from '@tde.io/plexis';
-import type { StateHookInput } from '@tde.io/plexis';
+import { defineDomain, when, enter, on, target } from '@tde.io/plexis';
+import type { PhaseHookInput } from '@tde.io/plexis';
 
 type Ctx = { enteredVia: string };
 
 const machine = defineDomain<Ctx>('machine', () => {
   when('idle', () => { on('start', target('running')); });
   when('running', () => {
-    enter((ctx, input: StateHookInput) => ({
+    enter((ctx, input: PhaseHookInput) => ({
       enteredVia: input.event ?? 'initial',
     }));
     on('stop', target('idle'));

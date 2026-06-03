@@ -21,11 +21,11 @@ Plexis throws `PlexisError` for all runtime errors. It extends the native `Error
 
 | Code | Description |
 | --- | --- |
-| `UNKNOWN_EVENT` | `follow()` was called with an event that has no matching edge and `strict` is `true` |
-| `STATE_MISMATCH` | `followFrom()` was called but the current state does not match the expected state |
-| `UNKNOWN_INITIAL_STATE` | The `initial` ID from the domain setup does not match any registered state |
+| `UNKNOWN_EVENT` | `follow()` was called with an event that has no matching `on` handler and `strict` is `true` |
+| `PHASE_MISMATCH` | `followFrom()` was called but the current phase does not match the expected phase |
+| `UNKNOWN_INITIAL_PHASE` | The `initial` ID from the domain setup does not match any registered phase |
 | `UNKNOWN_INITIAL_NODE` | The `initial` ID from the pipeline setup does not match any registered node |
-| `UNKNOWN_TARGET_STATE` | An edge `target` does not match any registered state |
+| `UNKNOWN_TARGET_PHASE` | An event `target` does not match any registered phase |
 | `UNKNOWN_TARGET_NODE` | A fork `target` does not match any registered node |
 | `UNKNOWN_NODE` | `inspectNode()` was called with an ID that does not exist |
 | `BUILDER_CLOSED` | A registration helper was called outside an active `defineDomain` or `definePipeline` setup function |
@@ -33,7 +33,7 @@ Plexis throws `PlexisError` for all runtime errors. It extends the native `Error
 ### Example
 
 ```typescript
-import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+import { defineDomain, when, on, target, terminal } from '@tde.io/plexis';
 import type { PlexisError } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
@@ -45,25 +45,25 @@ const order = defineDomain('order', () => {
 });
 
 try {
-  await order.follow('cancel'); // no cancel edge + strict: true
+  await order.follow('cancel'); // no 'cancel' event + strict: true
 } catch (err) {
   const e = err as PlexisError;
   if (e.code === 'UNKNOWN_EVENT') {
-    console.log('No edge for event:', e.message);
+    console.log('No event handler:', e.message);
     console.log('Domain:', e.domainId);
   }
 }
 ```
 
-### Example: handling `STATE_MISMATCH`
+### Example: handling `PHASE_MISMATCH`
 
 ```typescript
 try {
   await order.followFrom('processing', 'submit'); // domain is in 'pending'
 } catch (err) {
   const e = err as PlexisError;
-  if (e.code === 'STATE_MISMATCH') {
-    console.log('Expected state mismatch:', e.message);
+  if (e.code === 'PHASE_MISMATCH') {
+    console.log('Expected phase mismatch:', e.message);
   }
 }
 ```

@@ -153,7 +153,7 @@ const pipelineDot = toDot(charge.graph.describe());
 
 ## Filtering edge kinds
 
-The `GraphDescriptor` may include edges of various kinds (`'domain-flow'`, `'state-entry-pipeline'`, `'pipeline-fork'`, etc.). Filter to only the edges you want to render:
+The `GraphDescriptor` may include edges of various kinds (`'domain-event'`, `'phase-entry-pipeline'`, `'pipeline-fork'`, etc.). Filter to only the edges you want to render:
 
 ```typescript
 function toMermaidSimple(descriptor: GraphDescriptor): string {
@@ -163,9 +163,9 @@ function toMermaidSimple(descriptor: GraphDescriptor): string {
     if (entry.nodeId) lines.push(`  [*] --> ${entry.nodeId}`);
   }
 
-  // Only render the primary transition edges
+  // Only render the primary event edges
   for (const edge of descriptor.edges.filter(
-    (e) => e.kind === 'domain-flow' || e.kind === 'pipeline-fork'
+    (e) => e.kind === 'domain-event' || e.kind === 'pipeline-fork'
   )) {
     const from = edge.from.nodeId ?? '?';
     const to = edge.to.nodeId ?? '?';

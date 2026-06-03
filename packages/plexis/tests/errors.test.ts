@@ -22,23 +22,23 @@ describe('PlexisError', () => {
   });
 
   it('unknownEvent sets code UNKNOWN_EVENT and domainId', () => {
-    const err = PlexisError.unknownEvent('order', 'pending', 'CANCEL');
+    const err = PlexisError.unknownEvent('order', 'pending', 'cancel');
     expect(err.code).toBe('UNKNOWN_EVENT');
     expect(err.domainId).toBe('order');
   });
 
-  it('stateMismatch sets code STATE_MISMATCH and stores expected/actual', () => {
-    const err = PlexisError.stateMismatch('order', 'processing', 'pending');
-    expect(err.code).toBe('STATE_MISMATCH');
+  it('phaseMismatch sets code PHASE_MISMATCH and stores expected/actual', () => {
+    const err = PlexisError.phaseMismatch('order', 'processing', 'pending');
+    expect(err.code).toBe('PHASE_MISMATCH');
     expect(err.domainId).toBe('order');
     const ctx = err.context as { expected: string; actual: string };
     expect(ctx.expected).toBe('processing');
     expect(ctx.actual).toBe('pending');
   });
 
-  it('unknownInitialState sets code UNKNOWN_INITIAL_STATE', () => {
-    const err = PlexisError.unknownInitialState('order', 'missing');
-    expect(err.code).toBe('UNKNOWN_INITIAL_STATE');
+  it('unknownInitialPhase sets code UNKNOWN_INITIAL_PHASE', () => {
+    const err = PlexisError.unknownInitialPhase('order', 'missing');
+    expect(err.code).toBe('UNKNOWN_INITIAL_PHASE');
     expect(err.domainId).toBe('order');
   });
 
@@ -48,9 +48,9 @@ describe('PlexisError', () => {
     expect(err.pipelineId).toBe('payment');
   });
 
-  it('unknownTargetState sets code UNKNOWN_TARGET_STATE', () => {
-    const err = PlexisError.unknownTargetState('order', 'pending', 'PAY', 'gone');
-    expect(err.code).toBe('UNKNOWN_TARGET_STATE');
+  it('unknownTargetPhase sets code UNKNOWN_TARGET_PHASE', () => {
+    const err = PlexisError.unknownTargetPhase('order', 'pending', 'pay', 'gone');
+    expect(err.code).toBe('UNKNOWN_TARGET_PHASE');
     expect(err.domainId).toBe('order');
   });
 

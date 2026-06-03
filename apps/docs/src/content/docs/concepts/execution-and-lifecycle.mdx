@@ -9,17 +9,17 @@ When code calls `domain.follow()` or `pipeline.run()`, the runtime follows a det
 
 Every call to `domain.follow(event, payload)` runs these steps in sequence:
 
-1. **Guard check** — if the flow has a `guard` function, it is evaluated first. If it returns `false`, the follow is blocked immediately; no context changes, no side effects.
-2. **`exit`** — the current state's `exit` hook runs. The patch it returns is merged into context.
-3. **Flow action** — the flow's `action` (registered via `on(event, { action })`) runs. Its patch is merged into context.
-4. **Flow pipeline** — if the flow has a `pipeline`, it runs now against the updated context. Its final context becomes the new context.
-5. **State transitions** — the domain moves to the target state.
-6. **`enter`** — the new state's `enter` hook runs. Its patch is merged into context.
-7. **State entry pipeline** — if the new state has a `pipeline`, it runs against the updated context.
-8. **History and subscribers** — the transition is recorded in history, and all `subscribe` listeners are called with the new snapshot.
+1. **Guard check** — if the event has a `guard` function, it is evaluated first. If it returns `false`, the follow is blocked immediately; no context changes, no side effects.
+2. **`exit`** — the current phase's `exit` hook runs. The patch it returns is merged into context.
+3. **`on` action** — the event's `action` (registered via the ambient `action(fn)` helper inside the `on` setup function) runs. Its patch is merged into context.
+4. **`on` pipeline** — if the event has a `pipeline`, it runs against the updated context. Its final context becomes the new context.
+5. **Phase change** — the domain moves to the target phase.
+6. **`enter`** — the new phase's `enter` hook runs. Its patch is merged into context.
+7. **Phase entry pipeline** — if the new phase has a `pipeline`, it runs against the updated context.
+8. **History and subscribers** — the event is recorded in history, and all `subscribe` listeners are called with the new snapshot.
 
 ```typescript
-import { defineDomain, when, enter, exit, on } from '@tde.io/plexis';
+import { defineDomain, when, enter, exit, on, action, target } from '@tde.io/plexis';
 
 const workflow = defineDomain('workflow', () => {
   when('draft', () => {
@@ -47,7 +47,7 @@ const workflow = defineDomain('workflow', () => {
 });
 ```
 
-**Where side effects belong:** use `enter`/`exit` for state-scoped side effects (logging, metrics) and flow actions for transition-scoped ones (validation, API calls triggered by a specific event). Subscribers (step 8) are ideal for reacting to the completed transition from outside the domain.
+**Where side effects belong:** use `enter`/`exit` for phase-scoped side effects (logging, metrics) and event actions for event-scoped ones (validation, API calls triggered by a specific event). Subscribers (step 8) are ideal for reacting to the completed event from outside the domain.
 
 ## Pipeline: the run loop
 

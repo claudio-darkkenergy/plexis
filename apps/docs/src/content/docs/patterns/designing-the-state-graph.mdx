@@ -1,16 +1,16 @@
 ---
-title: Designing the State Graph
-description: Practical guidance on choosing an initial state, declaring terminals, avoiding unreachable states, and understanding what strict mode rejects.
+title: Designing the Phase Graph
+description: Practical guidance on choosing an initial phase, declaring terminals, avoiding unreachable phases, and understanding what strict mode rejects.
 ---
 
-A domain's state graph is declared in the setup function. Getting the structure right — especially `initial`, terminal states, and reachability — determines whether the machine models your business domain cleanly and whether strict mode stays silent.
+A domain's phase graph is declared in the setup function. Getting the structure right — especially `initial`, terminal phases, and reachability — determines whether the flow models your business domain cleanly and whether strict mode stays silent.
 
 ## Choosing `initial`
 
-The `initial` field in the setup return value names the state the domain starts in when first created. It must match a state you registered with `when()`.
+The `initial` field in the setup return value names the phase the domain starts in when first created. It must match a phase you registered with `when()`.
 
 ```typescript
-import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+import { defineDomain, when, on, target, terminal } from '@tde.io/plexis';
 
 const subscription = defineDomain('subscription', () => {
   when('trial', () => {
@@ -23,29 +23,29 @@ const subscription = defineDomain('subscription', () => {
   when('expired', terminal());
   when('cancelled', terminal());
 
-  // 'trial' is the starting point — must be a registered state
+  // 'trial' is the starting point — must be a registered phase
   return { context: {}, initial: 'trial' };
 });
 
-console.log(subscription.state); // 'trial'
+console.log(subscription.phase); // 'trial'
 ```
 
-If `initial` names a state that was not registered, the runtime throws `PlexisError` with code `UNKNOWN_INITIAL_STATE` when the domain is created.
+If `initial` names a phase that was not registered, the runtime throws `PlexisError` with code `UNKNOWN_INITIAL_PHASE` when the domain is created.
 
-## Declaring terminal states
+## Declaring terminal phases
 
-A terminal state is one the domain can enter but never leave. Declare it by passing `terminal()` as the second argument to `when()`. The domain will not follow any event while in a terminal state (following returns `status: 'ignored'`).
+A terminal phase is one the domain can enter but never leave. Declare it by passing `terminal()` as the second argument to `when()`. The domain will not follow any event while in a terminal phase (following returns `status: 'ignored'`).
 
 ```typescript
 when('fulfilled', terminal());
 when('cancelled', terminal());
 ```
 
-Terminal states do not need flows registered inside them. Any `on()` calls inside a terminal state's setup function are ignored at runtime.
+Terminal phases do not need events registered inside them. Any `on()` calls inside a terminal phase's setup function are ignored at runtime.
 
-## Unreachable states
+## Unreachable phases
 
-An unreachable state is one that no edge points to and that is not the `initial` state. The domain can never enter it through normal operation.
+An unreachable phase is one that no event points to and that is not the `initial` phase. The domain can never enter it through normal operation.
 
 ```typescript
 const broken = defineDomain('broken', () => {
@@ -53,13 +53,13 @@ const broken = defineDomain('broken', () => {
     on('done', target('done'));
   });
   when('done', terminal());
-  // Nobody transitions to 'orphan' — it is unreachable
+  // Nobody moves to 'orphan' — it is unreachable
   when('orphan', terminal());
   return { context: {}, initial: 'active' };
 });
 ```
 
-Without strict mode, unreachable states are silently ignored. With `strict: true`, the runtime rejects them at creation time.
+Without strict mode, unreachable phases are silently ignored. With `strict: true`, the runtime rejects them at creation time.
 
 ## Strict mode
 
@@ -75,15 +75,15 @@ const order = defineDomain('order', () => {
   when('ghost', terminal());
 
   return { context: {}, initial: 'pending', strict: true };
-  // Throws PlexisError at creation: UNREACHABLE_STATE 'ghost'
+  // Throws PlexisError at creation: UNREACHABLE_PHASE 'ghost'
 });
 ```
 
 Strict mode rejects:
 
-- An `initial` that names an unregistered state.
-- Edge targets that name unregistered states.
-- States that are not reachable from `initial` and are not `initial` themselves.
+- An `initial` that names an unregistered phase.
+- Event targets that name unregistered phases.
+- Phases that are not reachable from `initial` and are not `initial` themselves.
 
 ## Reading the graph
 

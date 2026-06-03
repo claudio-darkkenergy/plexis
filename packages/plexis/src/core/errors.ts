@@ -26,24 +26,24 @@ export class PlexisError extends Error {
     if (captureStackTrace) captureStackTrace(this, new.target);
   }
 
-  static unknownEvent(domainId: string, state: string, event: string): PlexisError {
+  static unknownEvent(domainId: string, phase: string, event: string): PlexisError {
     return new PlexisError(
-      `Unknown event "${event}" in state "${state}" for domain "${domainId}"`,
+      `Unknown event "${event}" in phase "${phase}" for domain "${domainId}"`,
       { code: 'UNKNOWN_EVENT', domainId }
     );
   }
 
-  static stateMismatch(domainId: string, expected: string, actual: string): PlexisError {
+  static phaseMismatch(domainId: string, expected: string, actual: string): PlexisError {
     return new PlexisError(
-      `Domain "${domainId}" expected state "${expected}" but is in "${actual}"`,
-      { code: 'STATE_MISMATCH', domainId, context: { expected, actual } }
+      `Domain "${domainId}" expected phase "${expected}" but is in "${actual}"`,
+      { code: 'PHASE_MISMATCH', domainId, context: { expected, actual } }
     );
   }
 
-  static unknownInitialState(domainId: string, state: string): PlexisError {
+  static unknownInitialPhase(domainId: string, phase: string): PlexisError {
     return new PlexisError(
-      `Domain "${domainId}" initial state "${state}" does not exist`,
-      { code: 'UNKNOWN_INITIAL_STATE', domainId }
+      `Domain "${domainId}" initial phase "${phase}" does not exist`,
+      { code: 'UNKNOWN_INITIAL_PHASE', domainId }
     );
   }
 
@@ -54,10 +54,10 @@ export class PlexisError extends Error {
     );
   }
 
-  static unknownTargetState(domainId: string, fromState: string, event: string, target: string): PlexisError {
+  static unknownTargetPhase(domainId: string, fromPhase: string, event: string, target: string): PlexisError {
     return new PlexisError(
-      `Domain "${domainId}" edge "${event}" from "${fromState}" targets unknown state "${target}"`,
-      { code: 'UNKNOWN_TARGET_STATE', domainId }
+      `Domain "${domainId}" event "${event}" from "${fromPhase}" targets unknown phase "${target}"`,
+      { code: 'UNKNOWN_TARGET_PHASE', domainId }
     );
   }
 
@@ -91,7 +91,7 @@ export class PlexisError extends Error {
 
   static missingTarget(event: string): PlexisError {
     return new PlexisError(
-      `on('${event}') — setup function did not return a target(). Use return target('state-id') as the last statement of the on() setup function.`,
+      `on('${event}') — setup function did not return a target(). Use return target('phase-id') as the last statement of the on() setup function.`,
       { code: 'MISSING_TARGET' }
     );
   }

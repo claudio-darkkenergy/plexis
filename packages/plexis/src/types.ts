@@ -15,7 +15,7 @@ export type MergeMetadata = {
   domainId?: string;
   pipelineId?: string;
   nodeId?: string;
-  stateId?: string;
+  phaseId?: string;
   event?: string;
 };
 
@@ -23,7 +23,7 @@ export type MergeMetadata = {
 
 export type TraceLevel =
   | 'domain'
-  | 'state'
+  | 'phase'
   | 'edge'
   | 'pipeline'
   | 'pipeline-node'
@@ -50,7 +50,7 @@ export type TraceEvent = {
   domainId?: string;
   pipelineId?: string;
   nodeId?: string;
-  stateId?: string;
+  phaseId?: string;
   event?: string;
   label?: string;
   from?: string;
@@ -75,8 +75,8 @@ export type TracerOptions = {
 // ─── Graph Types ─────────────────────────────────────────────────────────────
 
 export type GraphNodeKind =
-  | 'domain-state'
-  | 'domain-flow'
+  | 'domain-phase'
+  | 'domain-event'
   | 'pipeline-node'
   | 'pipeline-fork'
   | 'pipeline';
@@ -100,10 +100,10 @@ export type GraphNode = {
 };
 
 export type GraphEdgeKind =
-  | 'domain-flow'
-  | 'state-entry-pipeline'
-  | 'state-exit-hook'
-  | 'state-entry-hook'
+  | 'domain-event'
+  | 'phase-entry-pipeline'
+  | 'phase-exit-hook'
+  | 'phase-entry-hook'
   | 'edge-action'
   | 'edge-pipeline'
   | 'pipeline-fork'
@@ -122,7 +122,7 @@ export type GraphEdge = {
 };
 
 export type GraphAttachmentKind =
-  | 'state-entry-pipeline'
+  | 'phase-entry-pipeline'
   | 'edge-pipeline'
   | 'subpipeline';
 
@@ -299,7 +299,7 @@ export type PipelineGraph = {
 
 // ─── Domain Runtime Types ───────────────────────────────────────────────────
 
-export type StateHookInput = {
+export type PhaseHookInput = {
   event?: string;
   payload?: unknown;
   traceId: string;
@@ -325,11 +325,11 @@ export type OnDef<TContext extends object = Record<string, unknown>> = {
 export type WhenDef<TContext extends object = Record<string, unknown>> = {
   enter?: (
     ctx: TContext,
-    input: StateHookInput
+    input: PhaseHookInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>;
   exit?: (
     ctx: TContext,
-    input: StateHookInput
+    input: PhaseHookInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>;
   pipeline?: Pipeline<TContext>;
   on?: Record<string, OnDef<TContext>>;
@@ -371,7 +371,7 @@ export type DomainFollowResult<
 export type DomainSnapshot<
   TContext extends object = Record<string, unknown>
 > = {
-  state: string;
+  phase: string;
   context: TContext;
   historyLength: number;
 };
@@ -388,11 +388,11 @@ export type DomainHistoryEntry<
   traceId: string;
 };
 
-export type CurrentStateNode<
+export type CurrentPhaseNode<
   TContext extends object = Record<string, unknown>,
   TEdges extends string = string
 > = {
-  state: string;
+  phase: string;
   context: TContext;
   can(event: TEdges, payload?: unknown): boolean | Promise<boolean>;
   follow(event: TEdges, payload?: unknown): Promise<DomainFollowResult<TContext>>;
@@ -415,13 +415,13 @@ export interface Domain<
   TEdges extends string = string
 > {
   id: string;
-  state: string;
+  phase: string;
   context: TContext;
-  current: CurrentStateNode<TContext, TEdges>;
+  current: CurrentPhaseNode<TContext, TEdges>;
 
   follow(event: TEdges, payload?: unknown): Promise<DomainFollowResult<TContext>>;
   followFrom(
-    state: string,
+    expectedPhase: string,
     event: TEdges,
     payload?: unknown
   ): Promise<DomainFollowResult<TContext>>;
@@ -488,10 +488,10 @@ export type OnGuardInput = { event: string; payload?: unknown; traceId: string }
 
 export type PlexisErrorCode =
   | 'UNKNOWN_EVENT'
-  | 'STATE_MISMATCH'
-  | 'UNKNOWN_INITIAL_STATE'
+  | 'PHASE_MISMATCH'
+  | 'UNKNOWN_INITIAL_PHASE'
   | 'UNKNOWN_INITIAL_NODE'
-  | 'UNKNOWN_TARGET_STATE'
+  | 'UNKNOWN_TARGET_PHASE'
   | 'UNKNOWN_TARGET_NODE'
   | 'UNKNOWN_NODE'
   | 'BUILDER_CLOSED'
@@ -521,7 +521,7 @@ export declare function definePipeline<TContext extends object>(
   options?: DefinePipelineOptions<TContext>
 ): Pipeline<TContext>;
 
-export declare function when<TContext extends object>(
+export declare function when(
   id: string,
   x: (() => void) | TerminalSentinel
 ): void;
@@ -529,18 +529,18 @@ export declare function when<TContext extends object>(
 export declare function enter<TContext extends object>(
   fn: (
     ctx: TContext,
-    input: StateHookInput
+    input: PhaseHookInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>
 ): void;
 
 export declare function exit<TContext extends object>(
   fn: (
     ctx: TContext,
-    input: StateHookInput
+    input: PhaseHookInput
   ) => PatchLike<TContext> | Promise<PatchLike<TContext>>
 ): void;
 
-export declare function on<TContext extends object>(
+export declare function on(
   event: string,
   def: TargetDef | OnSetupFn
 ): void;
@@ -555,7 +555,7 @@ export declare function pipeline<TContext extends object>(
   p: Pipeline<TContext>
 ): void;
 
-export declare function node<TContext extends object>(
+export declare function node(
   id: string,
   x: (() => void) | TerminalSentinel
 ): void;
@@ -603,9 +603,9 @@ export declare class DomainClass<
   TEdges extends string = string
 > implements Domain<TContext, TEdges> {
   id: string;
-  state: string;
+  phase: string;
   context: TContext;
-  current: CurrentStateNode<TContext, TEdges>;
+  current: CurrentPhaseNode<TContext, TEdges>;
   graph: DomainGraph;
 
   constructor(
@@ -615,7 +615,7 @@ export declare class DomainClass<
   );
 
   follow(event: TEdges, payload?: unknown): Promise<DomainFollowResult<TContext>>;
-  followFrom(state: string, event: TEdges, payload?: unknown): Promise<DomainFollowResult<TContext>>;
+  followFrom(expectedPhase: string, event: TEdges, payload?: unknown): Promise<DomainFollowResult<TContext>>;
   can(event: TEdges, payload?: unknown): boolean | Promise<boolean>;
   subscribe(listener: (snapshot: DomainSnapshot<TContext>) => void): () => void;
   snapshot(): DomainSnapshot<TContext>;
@@ -660,11 +660,11 @@ export declare class PlexisError extends Error {
     context?: unknown;
   });
 
-  static unknownEvent(domainId: string, state: string, event: string): PlexisError;
-  static stateMismatch(domainId: string, expected: string, actual: string): PlexisError;
-  static unknownInitialState(domainId: string, state: string): PlexisError;
+  static unknownEvent(domainId: string, phase: string, event: string): PlexisError;
+  static phaseMismatch(domainId: string, expected: string, actual: string): PlexisError;
+  static unknownInitialPhase(domainId: string, phase: string): PlexisError;
   static unknownInitialNode(pipelineId: string, node: string): PlexisError;
-  static unknownTargetState(domainId: string, fromState: string, event: string, target: string): PlexisError;
+  static unknownTargetPhase(domainId: string, fromPhase: string, event: string, target: string): PlexisError;
   static unknownTargetNode(pipelineId: string, fromNode: string, target: string): PlexisError;
   static unknownNode(id: string, node: string): PlexisError;
   static builderClosed(helperName: string): PlexisError;

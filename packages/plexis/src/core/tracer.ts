@@ -115,9 +115,9 @@ export class Tracer implements TracerInterface {
       case 'json': return [...this._events];
       case 'text': return this._events
         .map(e => {
-          const sub = e.nodeId ?? e.stateId;
+          const sub = e.nodeId ?? e.phaseId;
           const scope = (e.domainId ?? e.pipelineId ?? '?') + (sub ? `/${sub}` : '');
-          return `[${fmtTime(e.timestamp)}] [${scope}] ${e.type}${e.event ? ' ' + e.event : ''}`;
+          return `[${fmtTime(e.timestamp)}] [${scope}] ${e.type}${e.event ? ' "' + e.event + '"' : ''}`;
         })
         .join('\n');
       case 'tree': return buildTree(this._events);

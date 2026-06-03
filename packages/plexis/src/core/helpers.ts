@@ -5,7 +5,7 @@ import type {
   PipelineNodeDef,
   PipelineForkDef,
   Pipeline as PipelineType,
-  StateHookInput,
+  PhaseHookInput,
   PatchLike,
   ActionInput,
   PipelineConditionInput,
@@ -126,7 +126,7 @@ export function when<TContext extends object>(
 }
 
 export function enter<TContext extends object>(
-  fn: (ctx: TContext, input: StateHookInput) => PatchLike<TContext> | Promise<PatchLike<TContext>>
+  fn: (ctx: TContext, input: PhaseHookInput) => PatchLike<TContext> | Promise<PatchLike<TContext>>
 ): void {
   const scope = getCurrentScope();
   if (!scope || scope.kind !== 'when') {
@@ -136,7 +136,7 @@ export function enter<TContext extends object>(
 }
 
 export function exit<TContext extends object>(
-  fn: (ctx: TContext, input: StateHookInput) => PatchLike<TContext> | Promise<PatchLike<TContext>>
+  fn: (ctx: TContext, input: PhaseHookInput) => PatchLike<TContext> | Promise<PatchLike<TContext>>
 ): void {
   const scope = getCurrentScope();
   if (!scope || scope.kind !== 'when') {
@@ -145,7 +145,7 @@ export function exit<TContext extends object>(
   scope.def.exit = fn;
 }
 
-export function on<TContext extends object>(
+export function on(
   event: string,
   def: TargetDef | (() => TargetDef)
 ): void {
@@ -157,7 +157,7 @@ export function on<TContext extends object>(
 
   if (isTargetDef(def)) {
     if (!('id' in def)) {
-      throw PlexisError.invalidTarget('on', 'pipeline targets are not valid for domain flows; use target(\'state-id\')');
+      throw PlexisError.invalidTarget('on', 'pipeline targets are not valid for domain flows; use target(\'phase-id\')');
     }
     scope.def.on[event] = { target: def.id };
     return;
@@ -177,7 +177,7 @@ export function on<TContext extends object>(
   }
 
   if (!('id' in result)) {
-    throw PlexisError.invalidTarget('on', 'pipeline targets are not valid for domain flows; use target(\'state-id\')');
+    throw PlexisError.invalidTarget('on', 'pipeline targets are not valid for domain flows; use target(\'phase-id\')');
   }
   const onDef: OnDef<any> = { target: result.id };
   if (onScope.guard !== null) onDef.guard = onScope.guard;

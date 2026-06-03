@@ -5,7 +5,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](https://www.typescriptlang.org/)
 
-Zero-dependency TypeScript library for modeling business state with domain state machines and finite workflow pipelines.
+Zero-dependency TypeScript library for modeling business flows with domain phases and finite workflow pipelines.
 
 ## Installation
 
@@ -58,11 +58,35 @@ console.log(result.to);     // 'processing'
 
 Plexis separates business logic into two layers:
 
-**Domain** — durable state that persists across time. A domain has named states, transitions (edges) triggered by events, optional guards, lifecycle hooks (`onEnter`/`onExit`), and can invoke pipelines on transitions. Define one with `defineDomain()` and advance it with `domain.follow(event)`.
+**Domain** — a flow that persists across time. A domain has named phases (declared with `when`), events (`on`) that move it between phases, optional guards, lifecycle hooks (`enter`/`exit`), and can invoke pipelines on events. Define one with `defineDomain()` and advance it with `domain.follow(event)`. The current phase is available as `domain.phase`.
 
 **Pipeline** — a finite, single-run workflow. Execution starts at the initial node and follows the first matching fork at each step until it reaches a terminal node. Define one with `definePipeline()` and run it with `pipeline.run(context)`.
 
-The two layers compose naturally: an edge on a domain can invoke a pipeline, so workflow logic (validation, enrichment, side effects) lives in the pipeline while the domain tracks the resulting state.
+The two layers compose naturally: a domain event can invoke a pipeline, so workflow logic (validation, enrichment, side effects) lives in the pipeline while the domain tracks the resulting phase.
+
+## 2.0.0 Migration
+
+This release renames the "state" vocabulary to "phase" throughout the public API. All changes are mechanical renames:
+
+| 1.x | 2.0.0 |
+|---|---|
+| `domain.state` | `domain.phase` |
+| `DomainSnapshot.state` | `DomainSnapshot.phase` |
+| `followFrom(expectedState, …)` | `followFrom(expectedPhase, …)` |
+| `StateHookInput` | `PhaseHookInput` |
+| `CurrentStateNode` | `CurrentPhaseNode` |
+| `STATE_MISMATCH` | `PHASE_MISMATCH` |
+| `UNKNOWN_INITIAL_STATE` | `UNKNOWN_INITIAL_PHASE` |
+| `UNKNOWN_TARGET_STATE` | `UNKNOWN_TARGET_PHASE` |
+| `GraphNodeKind: 'domain-state'` | `'domain-phase'` |
+| `GraphEdgeKind: 'domain-flow'` | `'domain-event'` |
+| `GraphEdgeKind: 'state-entry-pipeline'` | `'phase-entry-pipeline'` |
+| `GraphEdgeKind: 'state-entry-hook'` | `'phase-entry-hook'` |
+| `GraphEdgeKind: 'state-exit-hook'` | `'phase-exit-hook'` |
+| `TraceLevel: 'state'` | `'phase'` |
+| Tracer event type `'state.enter'` | `'phase.enter'` |
+| Tracer event type `'state.exit'` | `'phase.exit'` |
+| Tracer field `stateId` | `phaseId` |
 
 ## Zero Dependencies
 

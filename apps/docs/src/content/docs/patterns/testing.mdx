@@ -1,14 +1,14 @@
 ---
 title: Testing Domains and Pipelines
-description: Write deterministic tests using followFrom to start from any state, assert on recorded history, and exercise fork branches in isolation.
+description: Write deterministic tests using followFrom to start from any phase, assert on recorded history, and exercise fork branches in isolation.
 ---
 
-Plexis domains and pipelines are plain async objects with no hidden global state — they are easy to test. The key testing seams are: `followFrom()` to start a domain from any state without running through every prior transition, `history()` to assert on the recorded transition trail, and `pipeline.run()` called with context constructed to route through the fork you want to test.
+Plexis domains and pipelines are plain async objects with no hidden global state — they are easy to test. The key testing seams are: `followFrom()` to start a domain from any phase without running through every prior event, `history()` to assert on the recorded event trail, and `pipeline.run()` called with context constructed to route through the fork you want to test.
 
-## Testing a domain transition
+## Testing a domain event
 
 ```typescript
-import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+import { defineDomain, when, on, target, terminal } from '@tde.io/plexis';
 import { expect, test } from 'vitest';
 
 const order = defineDomain('order', () => {
@@ -22,39 +22,39 @@ const order = defineDomain('order', () => {
   return { context: { orderId: 'ord_1' }, initial: 'pending' };
 });
 
-test('submit transitions pending → processing', async () => {
+test('submit moves pending → processing', async () => {
   const result = await order.follow('submit');
 
   expect(result.status).toBe('followed');
   expect(result.from).toBe('pending');
   expect(result.to).toBe('processing');
-  expect(order.state).toBe('processing');
+  expect(order.phase).toBe('processing');
 });
 ```
 
-## Using `followFrom()` to start at an arbitrary state
+## Using `followFrom()` to start at an arbitrary phase
 
-Real domain paths often require several transitions to reach the state you want to test. `followFrom()` teleports the domain to any registered state before following the event — without running `exit`, `enter`, or any pipeline for the intermediate states.
+Real domain paths often require several events to reach the phase you want to test. `followFrom()` teleports the domain to any registered phase before following the event — without running `exit`, `enter`, or any pipeline for the intermediate phases.
 
 ```typescript
-test('fulfill transitions processing → fulfilled', async () => {
+test('fulfill moves processing → fulfilled', async () => {
   // Start at 'processing' without going through submit
   const result = await order.followFrom('processing', 'fulfill');
 
   expect(result.status).toBe('followed');
   expect(result.to).toBe('fulfilled');
-  expect(order.state).toBe('fulfilled');
+  expect(order.phase).toBe('fulfilled');
 });
 ```
 
-`followFrom()` also resets the domain's starting context to the current context, so tests are isolated from prior transitions on the same instance. Create a fresh domain per test suite if you need fully independent state.
+`followFrom()` also resets the domain's starting context to the current context, so tests are isolated from prior events on the same instance. Create a fresh domain per test suite if you need fully independent history.
 
 ## Asserting on `history()`
 
-`domain.history()` returns every completed transition as a `DomainHistoryEntry` — `{ from, to, event, payload, context, timestamp, traceId }`.
+`domain.history()` returns every completed event as a `DomainHistoryEntry` — `{ from, to, event, payload, context, timestamp, traceId }`.
 
 ```typescript
-test('history records both transitions', async () => {
+test('history records both events', async () => {
   await order.follow('submit');
   await order.follow('fulfill');
 
@@ -68,10 +68,10 @@ test('history records both transitions', async () => {
 });
 ```
 
-## Testing that a guard blocks a transition
+## Testing that a guard blocks an event
 
 ```typescript
-import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+import { defineDomain, when, on, guard, action, target } from '@tde.io/plexis';
 
 const account = defineDomain('account', () => {
   when('open', () => {
@@ -129,7 +129,7 @@ test('invalid card routes to decline', async () => {
 
 ## Creating a fresh domain per test
 
-A single domain instance accumulates state and history across calls. For isolated tests, create a new instance per test or use a factory:
+A single domain instance accumulates phase and history across calls. For isolated tests, create a new instance per test or use a factory:
 
 ```typescript
 function makeOrder() {
@@ -144,13 +144,13 @@ function makeOrder() {
 
 test('starts in pending', () => {
   const order = makeOrder();
-  expect(order.state).toBe('pending');
+  expect(order.phase).toBe('pending');
 });
 
-test('submit transitions to processing', async () => {
+test('submit moves to processing', async () => {
   const order = makeOrder();
   await order.follow('submit');
-  expect(order.state).toBe('processing');
+  expect(order.phase).toBe('processing');
 });
 ```
 

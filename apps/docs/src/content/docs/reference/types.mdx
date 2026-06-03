@@ -1,6 +1,6 @@
 ---
 title: Key Types
-description: Reference for DomainFollowResult, PipelineRunResult, DomainSnapshot, DomainHistoryEntry, NodeInspection, GraphDescriptor, PatchLike, ErrorPolicy, TraceEvent, TraceLevel, and TraceStatus.
+description: Reference for DomainFollowResult, PipelineRunResult, DomainSnapshot, DomainHistoryEntry, NodeInspection, GraphDescriptor, PatchLike, ErrorPolicy, TraceEvent, TraceLevel, and TraceStatus. Updated for 2.0.0 — DomainSnapshot uses phase, TraceLevel uses phase.
 ---
 
 These types appear in return values and handler signatures throughout the library.
@@ -70,7 +70,7 @@ Captured by `domain.snapshot()`; restored via `domain.restore(snapshot)`.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `state` | `string` | Yes | Current state ID at snapshot time |
+| `phase` | `string` | Yes | Current phase ID at snapshot time |
 | `context` | `TContext` | Yes | Context at snapshot time |
 | `historyLength` | `number` | Yes | Number of recorded history entries at snapshot time |
 
@@ -78,7 +78,7 @@ Captured by `domain.snapshot()`; restored via `domain.restore(snapshot)`.
 
 ```typescript
 const snap = order.snapshot();
-// { state: 'pending', context: { orderId: 'o1' }, historyLength: 0 }
+// { phase: 'pending', context: { orderId: 'o1' }, historyLength: 0 }
 
 await order.follow('submit');
 order.restore(snap); // rolls back to 'pending'
@@ -253,7 +253,7 @@ Single recorded trace event returned by `tracer.history()` and `tracer.byTraceId
 | `domainId` | `string` | No | Domain context |
 | `pipelineId` | `string` | No | Pipeline context |
 | `nodeId` | `string` | No | Node context |
-| `stateId` | `string` | No | State context |
+| `phaseId` | `string` | No | Phase context |
 | `event` | `string` | No | Event name (for domain events) |
 | `label` | `string` | No | Human-readable label |
 | `from` | `string` | No | Source state or node |
@@ -291,7 +291,7 @@ events.forEach((e) => {
 
 ## `TraceLevel`
 
-`'domain'` \| `'state'` \| `'edge'` \| `'pipeline'` \| `'pipeline-node'` \| `'fork'` \| `'action'` \| `'guard'` \| `'condition'`
+`'domain'` \| `'phase'` \| `'edge'` \| `'pipeline'` \| `'pipeline-node'` \| `'fork'` \| `'action'` \| `'guard'` \| `'condition'`
 
 ### Example
 
