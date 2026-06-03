@@ -3,12 +3,12 @@ title: Snapshots and Restore
 description: Take a domain snapshot and restore from it — what gets serialized, what does not, and how to handle version skew when the graph has changed.
 ---
 
-`domain.snapshot()` captures the current state, context, and history length as a plain object. `domain.restore(snapshot)` rewinds the domain to that captured point. Together they let you checkpoint a domain and pick it back up later.
+`domain.snapshot()` captures the current phase, context, and history length as a plain object. `domain.restore(snapshot)` rewinds the domain to that captured point. Together they let you checkpoint a domain and pick it back up later.
 
 ## Taking a snapshot
 
 ```typescript
-import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+import { defineDomain, when, on, target, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
@@ -24,10 +24,10 @@ const order = defineDomain('order', () => {
 await order.follow('submit');
 
 const snap = order.snapshot();
-// snap === { state: 'processing', context: { orderId: 'ord_1', items: 3 }, historyLength: 1 }
+// snap === { phase: 'processing', context: { orderId: 'ord_1', items: 3 }, historyLength: 1 }
 ```
 
-`DomainSnapshot` is a plain object — `{ state, context, historyLength }`. It is safe to `JSON.stringify` as long as the context contains only JSON-serializable values.
+`DomainSnapshot` is a plain object — `{ phase, context, historyLength }`. It is safe to `JSON.stringify` as long as the context contains only JSON-serializable values.
 
 ## Restoring from a snapshot
 
@@ -44,15 +44,15 @@ const order2 = defineDomain('order', () => {
 });
 
 order2.restore(snap);
-console.log(order2.state); // 'processing'
+console.log(order2.phase); // 'processing'
 console.log(order2.context.orderId); // 'ord_1'
 ```
 
-`restore()` sets the domain's current state and context to the snapshot values and resets the history length counter. The domain can then follow events from the restored point.
+`restore()` sets the domain's current phase and context to the snapshot values and resets the history length counter. The domain can then follow events from the restored point.
 
 ## What is not serialized
 
-Snapshots capture only the **data** layer: state name, context object, and history length. They do not capture:
+Snapshots capture only the **data** layer: phase name, context object, and history length. They do not capture:
 
 - **Handler functions** — `enter`, `exit`, `action`, `guard`, `condition` are part of the domain definition, not the snapshot. They are always sourced from the current definition at runtime.
 - **Subscribers** — `subscribe()` listeners are not saved or restored.
@@ -64,15 +64,15 @@ If you need the full history across boundaries, store it separately alongside th
 
 Restoring a snapshot into a *different* domain definition than the one that produced it can cause problems:
 
-- If the restored `state` no longer exists in the new definition, `restore()` will throw `PlexisError` with code `STATE_MISMATCH` or `UNKNOWN_STATE`.
+- If the restored `phase` no longer exists in the new definition, `restore()` will set the domain to that phase — subsequent `follow()` calls may encounter `UNKNOWN_EVENT` errors or undefined behavior.
 - If context shape changed, TypeScript will flag mismatches at compile time but the runtime will not reject them — your handlers may see unexpected fields or missing keys.
 
 To avoid this, version your snapshots alongside your domain definitions. If the definition changes in a breaking way, write a migration function that transforms old snapshots into the new shape before restoring.
 
 ```typescript
-type SnapV1 = { state: string; context: { orderId: string }; historyLength: number };
+type SnapV1 = { phase: string; context: { orderId: string }; historyLength: number };
 type SnapV2 = {
-  state: string;
+  phase: string;
   context: { orderId: string; version: number };
   historyLength: number;
 };

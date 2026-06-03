@@ -84,7 +84,7 @@ const checkout = defineDomain<CheckoutCtx>('checkout', () => {
 // Try to advance without submitting data — guard rejects
 const blocked = await checkout.follow('next');
 console.log(blocked.status); // 'blocked' — domain stays on 'shipping'
-console.log(checkout.state); // 'shipping'
+console.log(checkout.phase); // 'shipping'
 
 // Submit valid shipping data
 const step1 = await checkout.follow('next', {
@@ -93,7 +93,7 @@ const step1 = await checkout.follow('next', {
   zip: '12345',
 });
 console.log(step1.status); // 'followed'
-console.log(checkout.state); // 'payment'
+console.log(checkout.phase); // 'payment'
 
 // Try to advance without payment data
 const blocked2 = await checkout.follow('next');
@@ -105,12 +105,12 @@ const step2 = await checkout.follow('next', {
   expiry: '12/28',
 });
 console.log(step2.status); // 'followed'
-console.log(checkout.state); // 'review'
+console.log(checkout.phase); // 'review'
 
 // Confirm the order
 const step3 = await checkout.follow('confirm');
 console.log(step3.status); // 'followed'
-console.log(checkout.state); // 'confirmed'
+console.log(checkout.phase); // 'confirmed'
 ```
 
 `status: 'blocked'` confirms the domain rejected the transition — no side effects ran, context did not change, and the form stays on the current step. The UI can read `result.status` to decide whether to show a validation error message.

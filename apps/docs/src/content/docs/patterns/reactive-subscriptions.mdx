@@ -1,14 +1,14 @@
 ---
 title: Reactive Subscriptions
-description: Subscribe to domain transitions with domain.subscribe, read the current snapshot in the callback, and clean up with the returned unsubscribe function.
+description: Subscribe to domain events with domain.subscribe, read the current snapshot in the callback, and clean up with the returned unsubscribe function.
 ---
 
-`domain.subscribe()` registers a listener that is called every time the domain completes a transition. It returns a cleanup function. This is the framework-agnostic reactive seam — use it to trigger UI updates, log side effects, or synchronize external state after each transition.
+`domain.subscribe()` registers a listener that is called every time the domain completes an event. It returns a cleanup function. This is the framework-agnostic reactive seam — use it to trigger UI updates, log side effects, or synchronize external state after each event.
 
 ## Basic subscription
 
 ```typescript
-import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+import { defineDomain, when, on, target, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
@@ -18,20 +18,20 @@ const order = defineDomain('order', () => {
   return { context: { orderId: 'ord_1' }, initial: 'pending' };
 });
 
-// Register a listener — called after each completed transition
+// Register a listener — called after each completed event
 const unsubscribe = order.subscribe((snapshot) => {
-  console.log(`State: ${snapshot.state}`);
+  console.log(`Phase: ${snapshot.phase}`);
   console.log(`Context:`, snapshot.context);
   console.log(`History length: ${snapshot.historyLength}`);
 });
 
 await order.follow('submit');
-// → State: processing
+// → Phase: processing
 // → Context: { orderId: 'ord_1' }
 // → History length: 1
 ```
 
-The listener receives a `DomainSnapshot` — `{ state, context, historyLength }`. It is called synchronously after step 8 of the `follow()` lifecycle (after history is recorded).
+The listener receives a `DomainSnapshot` — `{ phase, context, historyLength }`. It is called synchronously after step 8 of the `follow()` lifecycle (after history is recorded).
 
 ## The unsubscribe function
 
@@ -50,7 +50,7 @@ Multiple subscribers can be registered on the same domain. Each `subscribe()` ca
 
 ## Reading a snapshot outside a listener
 
-`domain.snapshot()` returns the current snapshot without subscribing. Use it to read current state once, or to seed a UI framework's initial value before subscribing to updates.
+`domain.snapshot()` returns the current snapshot without subscribing. Use it to read the current phase once, or to seed a UI framework's initial value before subscribing to updates.
 
 ```typescript
 // Read once for initialization
@@ -65,7 +65,7 @@ const unsubscribe = order.subscribe((snap) => {
 ## Multiple subscribers
 
 ```typescript
-const log = order.subscribe((snap) => console.log('log:', snap.state));
+const log = order.subscribe((snap) => console.log('log:', snap.phase));
 const store = order.subscribe((snap) => externalStore.set(snap));
 
 await order.follow('submit');
@@ -76,19 +76,19 @@ log();   // stop logging
 store(); // stop store sync
 ```
 
-## No-op on terminal states
+## No-op on terminal phases
 
-Listeners are called after each completed transition. Because a terminal state cannot be exited, no further transitions happen after entering one — so the subscriber is called once when the terminal is reached and then never again.
+Listeners are called after each completed event. Because a terminal phase cannot be exited, no further events happen after entering one — so the subscriber is called once when the terminal is reached and then never again.
 
 ```typescript
 order.subscribe((snap) => {
-  if (snap.state === 'processing') {
+  if (snap.phase === 'processing') {
     cleanup(); // safe to call — 'processing' is terminal, this fires exactly once
   }
 });
 
-await order.follow('submit'); // listener fires with state: 'processing'
-// No more follows are possible from a terminal state
+await order.follow('submit'); // listener fires with phase: 'processing'
+// No more follows are possible from a terminal phase
 ```
 
 For framework-specific bindings that build on `subscribe` and `snapshot`, see the [React integration](/guides/integrations/react) and [Vue integration](/guides/integrations/vue). For the `DomainSnapshot` type and `subscribe()` signature, see the [Domain Instance reference](/reference/domain).

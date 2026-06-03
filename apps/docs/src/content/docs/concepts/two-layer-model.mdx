@@ -1,16 +1,16 @@
 ---
 title: The Two-Layer Model
-description: Understand the difference between Domain (durable cross-time state) and Pipeline (run-once finite workflow) and know when to reach for each.
+description: Understand the difference between Domain (a durable flow across time) and Pipeline (run-once finite workflow) and know when to reach for each.
 ---
 
-Plexis models business logic as two distinct things: long-lived state that outlasts a single operation, and finite workflows that complete and are done. Keeping these separate is the central design decision the library is built around.
+Plexis models business logic as two distinct things: long-lived flows that outlast a single operation, and finite workflows that complete and are done. Keeping these separate is the central design decision the library is built around.
 
-## Domain — durable state across time
+## Domain — a flow across time
 
-A **Domain** is a state machine that persists. It holds the current state, context, and transition history for the lifetime of the object. Each call to `domain.follow()` moves the machine from one state to another and returns the new context. The machine is still there after the transition, ready to handle the next event.
+A **Domain** is a flow that persists. It holds the current phase, context, and event history for the lifetime of the object. Each call to `domain.follow()` moves it from one phase to another and returns the new context. The domain is still there after the event, ready to handle the next one.
 
 ```typescript
-import { defineDomain, when, on, terminal } from '@tde.io/plexis';
+import { defineDomain, when, on, target, terminal } from '@tde.io/plexis';
 
 const order = defineDomain('order', () => {
   when('pending', () => {
@@ -31,7 +31,7 @@ await order.follow('submit');   // pending → processing
 await order.follow('fulfill'); // processing → fulfilled
 ```
 
-The domain retains its state between operations. `order.state` is `'fulfilled'` after both calls, and `order.history()` records the full path.
+The domain retains its phase between operations. `order.phase` is `'fulfilled'` after both calls, and `order.history()` records the full path.
 
 ## Pipeline — a run-once finite workflow
 
@@ -57,14 +57,14 @@ const result = await validatePayment.run({ cardValid: true });
 // result.status === 'completed'
 ```
 
-Each `run()` is isolated. There is no "current state" on the pipeline — context flows in, a result comes out.
+Each `run()` is isolated. There is no "current phase" on the pipeline — context flows in, a result comes out.
 
 ## Choosing which layer to use
 
 | Question | Domain | Pipeline |
 |---|---|---|
 | Does this persist between operations? | Yes | No |
-| Does it have states a user navigates over time? | Yes | No |
+| Does it have phases an entity moves through over time? | Yes | No |
 | Is it a single, finite execution path? | No | Yes |
 | Can it be run again from scratch? | No (restore needed) | Yes, any time |
 
@@ -72,10 +72,10 @@ Each `run()` is isolated. There is no "current state" on the pipeline — contex
 
 **Use a Pipeline when** you need a defined execution path from start to finish — a payment flow, a validation sequence, a multi-step transformation.
 
-**Combine them** when a domain flow triggers a workflow: attach a Pipeline to a flow or a state entry hook. The Domain manages which stage the business object is at; the Pipeline handles the work of getting there.
+**Combine them** when a domain event triggers a workflow: attach a Pipeline to an event or a phase entry. The Domain manages which phase the entity is in; the Pipeline handles the work of getting there.
 
 ```typescript
-import { defineDomain, definePipeline, when, on, node, action, fork, terminal } from '@tde.io/plexis';
+import { defineDomain, definePipeline, when, on, pipeline, node, action, fork, target, terminal } from '@tde.io/plexis';
 
 const chargeCard = definePipeline('charge-card', () => {
   node('charge', () => {

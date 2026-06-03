@@ -17,7 +17,7 @@ import type {
   DomainFollowResult,
   DomainSnapshot,
   DomainHistoryEntry,
-  CurrentStateNode,
+  CurrentPhaseNode,
   DomainGraph,
   Pipeline,
 } from '../types.js';
@@ -45,13 +45,13 @@ function buildDomain<TContext extends object>(
   const whens = scope.whens as Record<string, WhenDef<TContext>>;
 
   if (!whens[initial]) {
-    throw PlexisError.unknownInitialState(id, initial);
+    throw PlexisError.unknownInitialPhase(id, initial);
   }
 
-  for (const [stateId, whenDef] of Object.entries(whens)) {
+  for (const [phaseId, whenDef] of Object.entries(whens)) {
     for (const [event, onDef] of Object.entries((whenDef.on ?? {}) as Record<string, OnDef<TContext>>)) {
       if (!whens[onDef.target]) {
-        throw PlexisError.unknownTargetState(id, stateId, event, onDef.target);
+        throw PlexisError.unknownTargetPhase(id, phaseId, event, onDef.target);
       }
     }
   }
@@ -63,13 +63,12 @@ function buildDomain<TContext extends object>(
 export class Domain<TContext extends object = Record<string, unknown>, TEdges extends string = string>
   implements DomainInterface<TContext, TEdges> {
   readonly id: string;
-  state: string;
+  phase: string;
   context: TContext;
   graph: DomainGraph;
 
   private readonly _whens: Record<string, WhenDef<TContext>>;
   private readonly _strict: boolean;
-  private readonly _errorPolicy: string;
   private readonly _descriptor: GraphDescriptor;
   private readonly _options: DefineDomainOptions<TContext>;
   private readonly _subscribers: Set<(snapshot: DomainSnapshot<TContext>) => void>;
@@ -81,7 +80,6 @@ export class Domain<TContext extends object = Record<string, unknown>, TEdges ex
     this.id = built.id;
     this._whens = built.whens;
     this._strict = built.strict;
-    this._errorPolicy = built.errorPolicy;
     this._descriptor = built.descriptor;
     this._options = built.options;
     this._subscribers = new Set();
@@ -111,7 +109,7 @@ export class Domain<TContext extends object = Record<string, unknown>, TEdges ex
       observedPathsFrom: () => [],
     };
 
-    this.state = built.initial;
+    this.phase = built.initial;
     this.context = built.context;
     this._runInitialEnter(built);
   }
@@ -124,20 +122,20 @@ export class Domain<TContext extends object = Record<string, unknown>, TEdges ex
       if (patchOrPromise && typeof (patchOrPromise as Promise<unknown>).then === 'function') {
         (patchOrPromise as Promise<Partial<TContext> | null | undefined>).then((patch) => {
           this.context = applyMerge(this.context, patch, this._options.merge, {
-            phase: 'enter-initial', domainId: this.id, stateId: built.initial,
+            phase: 'enter-initial', domainId: this.id, phaseId: built.initial,
           });
         }).catch(() => {});
       } else {
         this.context = applyMerge(this.context, patchOrPromise as Partial<TContext> | null | undefined, this._options.merge, {
-          phase: 'enter-initial', domainId: this.id, stateId: built.initial,
+          phase: 'enter-initial', domainId: this.id, phaseId: built.initial,
         });
       }
     }
   }
 
-  get current(): CurrentStateNode<TContext, TEdges> {
+  get current(): CurrentPhaseNode<TContext, TEdges> {
     return {
-      state: this.state,
+      phase: this.phase,
       context: this.context,
       can: (event: TEdges, payload?: unknown) => this.can(event, payload),
       follow: (event: TEdges, payload?: unknown) => this.follow(event, payload),
@@ -149,82 +147,82 @@ export class Domain<TContext extends object = Record<string, unknown>, TEdges ex
     const { merge } = this._options;
     const traceId = tracer?._idFactory?.() ?? crypto.randomUUID();
 
-    const whenDef = this._whens[this.state];
+    const whenDef = this._whens[this.phase];
 
     if (!whenDef?.on?.[event as string]) {
       if (this._strict) {
-        throw PlexisError.unknownEvent(this.id, this.state, event as string);
+        throw PlexisError.unknownEvent(this.id, this.phase, event as string);
       }
-      return { status: 'ignored', event: event as string, from: this.state, context: this.context, traceId };
+      return { status: 'ignored', event: event as string, from: this.phase, context: this.context, traceId };
     }
 
     const onDef = (whenDef.on as Record<string, OnDef<TContext>>)[event as string];
-    const fromState = this.state;
+    const fromPhase = this.phase;
     const input = { event: event as string, payload, traceId };
 
     // Guard check
     if (onDef.guard) {
-      tracer?.record({ traceId, level: 'guard', type: 'guard.started', status: 'started', domainId: this.id, stateId: this.state, event: event as string });
+      tracer?.record({ traceId, level: 'guard', type: 'guard.started', status: 'started', domainId: this.id, phaseId: this.phase, event: event as string });
       const guardResult = await onDef.guard(this.context, input);
       if (!guardResult) {
-        tracer?.record({ traceId, level: 'guard', type: 'guard.blocked', status: 'blocked', domainId: this.id, stateId: this.state, event: event as string });
-        return { status: 'blocked', event: event as string, from: fromState, context: this.context, traceId };
+        tracer?.record({ traceId, level: 'guard', type: 'guard.blocked', status: 'blocked', domainId: this.id, phaseId: this.phase, event: event as string });
+        return { status: 'blocked', event: event as string, from: fromPhase, context: this.context, traceId };
       }
-      tracer?.record({ traceId, level: 'guard', type: 'guard.passed', status: 'completed', domainId: this.id, stateId: this.state, event: event as string });
+      tracer?.record({ traceId, level: 'guard', type: 'guard.passed', status: 'completed', domainId: this.id, phaseId: this.phase, event: event as string });
     }
 
-    tracer?.record({ traceId, level: 'domain', type: 'domain.follow.started', status: 'started', domainId: this.id, event: event as string, from: fromState });
+    tracer?.record({ traceId, level: 'domain', type: 'domain.follow.started', status: 'started', domainId: this.id, event: event as string, from: fromPhase });
 
     let ctx = this.context;
 
     // 1. exit
     if (whenDef.exit) {
       const patch = await whenDef.exit(ctx, input);
-      ctx = applyMerge(ctx, patch, merge, { phase: 'exit', domainId: this.id, stateId: fromState, event: event as string });
-      tracer?.record({ traceId, level: 'state', type: 'state.exit', status: 'completed', domainId: this.id, stateId: fromState, event: event as string });
+      ctx = applyMerge(ctx, patch, merge, { phase: 'exit', domainId: this.id, phaseId: fromPhase, event: event as string });
+      tracer?.record({ traceId, level: 'phase', type: 'phase.exit', status: 'completed', domainId: this.id, phaseId: fromPhase, event: event as string });
     }
 
-    // 2. Flow action
+    // 2. Event action
     if (onDef.action) {
       tracer?.record({ traceId, level: 'action', type: 'action.started', status: 'started', domainId: this.id, event: event as string });
-      const actionInput = { source: event as string, scope: fromState, payload, traceId };
+      const actionInput = { source: event as string, scope: fromPhase, payload, traceId };
       const patch = await onDef.action(ctx, actionInput);
-      ctx = applyMerge(ctx, patch, merge, { phase: 'flow-action', domainId: this.id, event: event as string });
+      ctx = applyMerge(ctx, patch, merge, { phase: 'event-action', domainId: this.id, event: event as string });
       tracer?.record({ traceId, level: 'action', type: 'action.completed', status: 'completed', domainId: this.id, event: event as string, outputPatch: patch });
     }
 
-    // 3. Flow pipeline
+    // 3. Event pipeline
     if (onDef.pipeline) {
       const pipelineResult = await (onDef.pipeline as any).run(ctx, payload, { traceId });
-      ctx = applyMerge(ctx, pipelineResult.context as Partial<TContext>, merge, { phase: 'flow-pipeline', domainId: this.id, event: event as string });
+      ctx = applyMerge(ctx, pipelineResult.context as Partial<TContext>, merge, { phase: 'event-pipeline', domainId: this.id, event: event as string });
     }
 
-    // 4. Transition state
-    this.state = onDef.target;
+    // 4. Phase change
+    this.phase = onDef.target;
     this.context = ctx;
-    tracer?.record({ traceId, level: 'domain', type: 'domain.transitioned', status: 'completed', domainId: this.id, from: fromState, to: this.state });
+    tracer?.record({ traceId, level: 'domain', type: 'domain.transitioned', status: 'completed', domainId: this.id, from: fromPhase, to: this.phase });
 
-    const targetWhenDef = this._whens[this.state];
+    const targetWhenDef = this._whens[this.phase];
 
     // 5. enter
     if (targetWhenDef?.enter) {
       const patch = await targetWhenDef.enter(ctx, input);
-      ctx = applyMerge(ctx, patch, merge, { phase: 'enter', domainId: this.id, stateId: this.state, event: event as string });
+      ctx = applyMerge(ctx, patch, merge, { phase: 'enter', domainId: this.id, phaseId: this.phase, event: event as string });
       this.context = ctx;
-      tracer?.record({ traceId, level: 'state', type: 'state.enter', status: 'completed', domainId: this.id, stateId: this.state, event: event as string });
+      tracer?.record({ traceId, level: 'phase', type: 'phase.enter', status: 'completed', domainId: this.id, phaseId: this.phase, event: event as string });
     }
 
-    // 6. State entry pipeline
+    // 6. Phase entry pipeline
     if (targetWhenDef?.pipeline) {
       const pipelineResult = await (targetWhenDef.pipeline as any).run(ctx, payload, { traceId });
-      ctx = applyMerge(ctx, pipelineResult.context as Partial<TContext>, merge, { phase: 'state-pipeline', domainId: this.id });
+      ctx = applyMerge(ctx, pipelineResult.context as Partial<TContext>, merge, { phase: 'phase-pipeline', domainId: this.id });
       this.context = ctx;
     }
 
     // 7. History
     this._history.push({
-      from: fromState,
-      to: this.state,
+      from: fromPhase,
+      to: this.phase,
       event: event as string,
       payload,
       context: this.context,
@@ -238,20 +236,20 @@ export class Domain<TContext extends object = Record<string, unknown>, TEdges ex
       try { listener(snap); } catch {}
     }
 
-    tracer?.record({ traceId, level: 'domain', type: 'domain.follow.completed', status: 'completed', domainId: this.id, from: fromState, to: this.state });
+    tracer?.record({ traceId, level: 'domain', type: 'domain.follow.completed', status: 'completed', domainId: this.id, from: fromPhase, to: this.phase });
 
-    return { status: 'followed', event: event as string, from: fromState, to: this.state, context: this.context, traceId };
+    return { status: 'followed', event: event as string, from: fromPhase, to: this.phase, context: this.context, traceId };
   }
 
-  async followFrom(expectedState: string, event: TEdges, payload?: unknown): Promise<DomainFollowResult<TContext>> {
-    if (this.state !== expectedState) {
-      throw PlexisError.stateMismatch(this.id, expectedState, this.state);
+  async followFrom(expectedPhase: string, event: TEdges, payload?: unknown): Promise<DomainFollowResult<TContext>> {
+    if (this.phase !== expectedPhase) {
+      throw PlexisError.phaseMismatch(this.id, expectedPhase, this.phase);
     }
     return this.follow(event, payload);
   }
 
   async can(event: TEdges, payload?: unknown): Promise<boolean> {
-    const whenDef = this._whens[this.state];
+    const whenDef = this._whens[this.phase];
     if (!whenDef?.on?.[event as string]) return false;
     const onDef = (whenDef.on as Record<string, OnDef<TContext>>)[event as string];
     if (!onDef.guard) return true;
@@ -266,11 +264,11 @@ export class Domain<TContext extends object = Record<string, unknown>, TEdges ex
   }
 
   snapshot(): DomainSnapshot<TContext> {
-    return { state: this.state, context: this.context, historyLength: this._history.length };
+    return { phase: this.phase, context: this.context, historyLength: this._history.length };
   }
 
   restore(snapshot: DomainSnapshot<TContext>): void {
-    this.state = snapshot.state;
+    this.phase = snapshot.phase;
     this.context = snapshot.context;
   }
 

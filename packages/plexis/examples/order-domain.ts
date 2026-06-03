@@ -83,7 +83,7 @@ const orderDomain = defineDomain<OrderCtx>('order', () => {
 
 async function main() {
   console.log('=== Order Domain ===\n');
-  console.log('Initial state:', orderDomain.state); // pending
+  console.log('Initial phase:', orderDomain.phase); // pending
 
   // Capture snapshot before SUBMIT for restore demo
   const snapBeforeSubmit = orderDomain.snapshot();
@@ -92,16 +92,16 @@ async function main() {
   const submitResult = await orderDomain.follow('submit', { userId: 'u_1' });
   console.log('\nAfter SUBMIT:');
   console.log('  follow result status:', submitResult.status);   // followed
-  console.log('  current state:', orderDomain.state);            // processing
+  console.log('  current phase:', orderDomain.phase);            // processing
   console.log('  context:', orderDomain.context);
 
-  // followFrom with wrong state → STATE_MISMATCH
-  console.log('\n--- followFrom (wrong state) ---');
+  // followFrom with wrong phase → PHASE_MISMATCH
+  console.log('\n--- followFrom (wrong phase) ---');
   try {
     await orderDomain.followFrom('pending', 'submit', { userId: 'u_2' });
   } catch (err) {
     if (err instanceof PlexisError) {
-      console.log('Caught PlexisError code:', err.code); // STATE_MISMATCH
+      console.log('Caught PlexisError code:', err.code); // PHASE_MISMATCH
     }
   }
 
@@ -112,16 +112,16 @@ async function main() {
   if (canComplete) {
     await orderDomain.current.follow('complete');
   }
-  console.log('Final state:', orderDomain.state); // done
+  console.log('Final phase:', orderDomain.phase); // done
 
   // snapshot / restore
   console.log('\n--- snapshot / restore ---');
   const snapAfterDone = orderDomain.snapshot();
-  console.log('Snapshot after done:', { state: snapAfterDone.state, historyLength: snapAfterDone.historyLength });
+  console.log('Snapshot after done:', { phase: snapAfterDone.phase, historyLength: snapAfterDone.historyLength });
   orderDomain.restore(snapBeforeSubmit);
-  console.log('Restored to:', orderDomain.state); // pending
+  console.log('Restored to:', orderDomain.phase); // pending
   orderDomain.restore(snapAfterDone);
-  console.log('Re-restored to:', orderDomain.state); // done
+  console.log('Re-restored to:', orderDomain.phase); // done
 
   // History
   console.log('\n--- History ---');
@@ -131,10 +131,10 @@ async function main() {
 
   // Trace
   console.log('\n--- Trace (tree, abbreviated) ---');
-  type TreeNode = { type: string; domainId?: string; pipelineId?: string; stateId?: string; nodeId?: string; event?: string; children?: TreeNode[] };
+  type TreeNode = { type: string; domainId?: string; pipelineId?: string; phaseId?: string; nodeId?: string; event?: string; children?: TreeNode[] };
   const tree = orderDomain.trace('tree') as TreeNode[];
   for (const root of (tree ?? []).slice(0, 5)) {
-    const sub = root.stateId ?? root.nodeId;
+    const sub = root.phaseId ?? root.nodeId;
     const scope = (root.domainId ?? root.pipelineId ?? '?') + (sub ? `/${sub}` : '');
     const ev = root.event ? ` ${root.event}` : '';
     console.log(`  [${scope}] ${root.type}${ev} (${(root.children ?? []).length} children)`);

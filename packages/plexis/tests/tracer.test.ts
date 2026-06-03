@@ -149,14 +149,14 @@ describe('export formats', () => {
 
   it('export("text") uses [HH:MM:SS.mmm] [scope] type format', () => {
     const t = makeTracer();
-    t.record({ traceId: 'T', level: 'domain', type: 'guard.started', domainId: 'order', stateId: 'pending', event: 'SUBMIT' });
+    t.record({ traceId: 'T', level: 'domain', type: 'guard.started', domainId: 'order', phaseId: 'pending', event: 'submit' });
     const text = t.export('text') as string;
     expect(typeof text).toBe('string');
     // Each line: [HH:MM:SS.mmm] [scope] type [event?]
     for (const line of text.split('\n').filter(Boolean)) {
       expect(line).toMatch(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\] \[.+\] \S+/);
     }
-    expect(text).toContain('[order/pending] guard.started SUBMIT');
+    expect(text).toContain('[order/pending] guard.started "submit"');
   });
 
   it('export("text") renders timestamp as HH:MM:SS.mmm', () => {
@@ -172,13 +172,13 @@ describe('export formats', () => {
     expect(t.export('text')).toContain('[pay/charge] pipeline-node.started');
   });
 
-  it('export("text") includes stateId in scope for guard events', () => {
+  it('export("text") includes phaseId in scope for guard events', () => {
     const t = makeTracer();
-    t.record({ traceId: 'T', level: 'guard', type: 'guard.passed', domainId: 'order', stateId: 'pending' });
+    t.record({ traceId: 'T', level: 'guard', type: 'guard.passed', domainId: 'order', phaseId: 'pending' });
     expect(t.export('text')).toContain('[order/pending] guard.passed');
   });
 
-  it('export("text") omits sub-scope when neither nodeId nor stateId present', () => {
+  it('export("text") omits sub-scope when neither nodeId nor phaseId present', () => {
     const t = makeTracer();
     t.record({ traceId: 'T', level: 'pipeline', type: 'pipeline.started', pipelineId: 'pay' });
     const line = (t.export('text') as string).trim();
@@ -190,8 +190,8 @@ describe('export formats', () => {
 
   it('export("text") appends event name for domain events', () => {
     const t = makeTracer();
-    t.record({ traceId: 'T', level: 'guard', type: 'guard.started', domainId: 'order', stateId: 'pending', event: 'SUBMIT' });
-    expect(t.export('text')).toContain('[order/pending] guard.started SUBMIT');
+    t.record({ traceId: 'T', level: 'guard', type: 'guard.started', domainId: 'order', phaseId: 'pending', event: 'submit' });
+    expect(t.export('text')).toContain('[order/pending] guard.started "submit"');
   });
 
   it('export("text") omits event token for pipeline events', () => {
@@ -218,6 +218,25 @@ describe('export formats', () => {
     const tree = t.export('tree') as Array<{ children: unknown[] }>;
     expect(tree).toHaveLength(1);
     expect(tree[0].children).toHaveLength(1);
+  });
+});
+
+describe('phase lifecycle events', () => {
+  it('phase.enter / phase.exit carry phaseId', () => {
+    const t = makeTracer();
+    t.record({ traceId: 'T', level: 'phase', type: 'phase.exit', domainId: 'order', phaseId: 'pending' });
+    t.record({ traceId: 'T', level: 'phase', type: 'phase.enter', domainId: 'order', phaseId: 'processing' });
+    const events = t.history();
+    expect(events[0].type).toBe('phase.exit');
+    expect(events[0].phaseId).toBe('pending');
+    expect(events[1].type).toBe('phase.enter');
+    expect(events[1].phaseId).toBe('processing');
+  });
+
+  it('phase level is valid in TraceLevel', () => {
+    const t = makeTracer();
+    const ev = t.record({ traceId: 'T', level: 'phase', type: 'phase.enter', domainId: 'order', phaseId: 'pending' });
+    expect(ev?.level).toBe('phase');
   });
 });
 

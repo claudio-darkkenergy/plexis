@@ -2,17 +2,17 @@
 
 ### Requirement: GraphDescriptor materialized at construction
 
-`describe()` SHALL return a fully materialized `GraphDescriptor` at construction time. Domain flow nodes SHALL use the kind literal `'domain-flow'` (renamed from `'domain-edge'`) in both `GraphNodeKind` and `GraphEdgeKind`. The graph-theory `GraphEdge` type and the `edges: GraphEdge[]` array on the descriptor are unchanged.
+`describe()` SHALL return a fully materialized `GraphDescriptor` at construction time. Graph nodes that represent a domain phase (a `when`) SHALL use the kind literal `'domain-phase'` (renamed from `'domain-state'`). Graph nodes and graph edges that represent a domain event (an `on`) SHALL use the kind literal `'domain-event'` (renamed from `'domain-flow'`). Phase-scoped attachment and hook kinds SHALL be `'phase-entry-pipeline'`, `'phase-entry-hook'`, and `'phase-exit-hook'` (renamed from the `'state-*'` equivalents). The graph-theory `GraphEdge` type, the `edges: GraphEdge[]` array, and the `'edge-action'` / `'edge-pipeline'` / `'subpipeline'` kind literals are unchanged.
 
 #### Scenario: describe returns a populated descriptor
 
-- **WHEN** a Domain with three states and four flows is constructed
-- **THEN** `domain.describe()` SHALL return a descriptor with three `nodes` of kind `'domain-state'`, four `edges` of kind `'domain-flow'`, and at least one element in `entryNodes`
+- **WHEN** a Domain with three phases and four `on` handlers is constructed
+- **THEN** `domain.describe()` SHALL return a descriptor with three `nodes` of kind `'domain-phase'`, four `edges` of kind `'domain-event'`, and at least one element in `entryNodes`
 
-#### Scenario: domain-flow replaces domain-edge in graph kinds
+#### Scenario: phase/event kinds replace state/flow in graph kinds
 
-- **WHEN** any graph node or graph edge represents a domain-level flow declared via `on(...)`
-- **THEN** its `kind` SHALL be `'domain-flow'` and SHALL NOT be `'domain-edge'`, while `'edge-action'`, `'edge-pipeline'`, and `'subpipeline'` kind literals SHALL remain unchanged
+- **WHEN** any graph node or graph edge represents a domain phase or a domain event
+- **THEN** a phase node's `kind` SHALL be `'domain-phase'` (never `'domain-state'`), an event's `kind` SHALL be `'domain-event'` (never `'domain-flow'` or `'domain-edge'`), and phase pipelines/hooks SHALL use `'phase-entry-pipeline'` / `'phase-entry-hook'` / `'phase-exit-hook'`, while `'edge-action'`, `'edge-pipeline'`, and `'subpipeline'` kind literals SHALL remain unchanged
 
 ### Requirement: Node lookup by id
 
@@ -57,7 +57,7 @@ Both `domain.graph.node(id)` and `pipeline.graph.node(id)` SHALL return the `Gra
 
 #### Scenario: Domain inspects an attached pipeline node
 
-- **WHEN** a Domain attaches Pipeline `'payment'` to an edge and `domain.inspectNode({ kind: 'pipeline-node', pipelineId: 'payment', nodeId: 'fraud-check' })` is called
+- **WHEN** a Domain attaches Pipeline `'payment'` to an event and `domain.inspectNode({ kind: 'pipeline-node', pipelineId: 'payment', nodeId: 'fraud-check' })` is called
 - **THEN** the returned `NodeInspection` SHALL include `inbound` and `outbound` edges for `'fraud-check'` from the `'payment'` pipeline's graph
 
 ### Requirement: `inspectNode` composes node, paths, and attachments
@@ -71,9 +71,14 @@ Both `domain.graph.node(id)` and `pipeline.graph.node(id)` SHALL return the `Gra
 
 ### Requirement: Attachments declared by composition
 
-`GraphDescriptor.attachments` SHALL list every place where a pipeline is attached to a Domain — including state entry pipelines, state exit hooks (when implemented as pipelines), and edge pipelines — using `GraphAttachment { kind, owner, pipeline }`.
+`GraphDescriptor.attachments` SHALL list every place where a pipeline is attached to a Domain — including phase entry pipelines and event pipelines — using `GraphAttachment { kind, owner, pipeline }`.
 
-#### Scenario: Edge-attached pipeline appears in attachments
+#### Scenario: Event-attached pipeline appears in attachments
 
-- **WHEN** a Domain edge declares a `pipeline: payment`
-- **THEN** `domain.describe().attachments` SHALL contain an entry with `kind: 'edge-pipeline'`, `owner` referencing the edge, and `pipeline` referencing the `'payment'` pipeline
+- **WHEN** a Domain event declares a `pipeline: payment`
+- **THEN** `domain.describe().attachments` SHALL contain an entry with `kind: 'edge-pipeline'`, `owner` referencing the event edge, and `pipeline` referencing the `'payment'` pipeline
+
+#### Scenario: Phase entry pipeline appears in attachments
+
+- **WHEN** a Domain phase declares a `pipeline: onboard`
+- **THEN** `domain.describe().attachments` SHALL contain an entry with `kind: 'phase-entry-pipeline'`, `owner` referencing the phase node, and `pipeline` referencing the `'onboard'` pipeline

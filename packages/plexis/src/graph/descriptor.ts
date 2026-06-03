@@ -14,34 +14,34 @@ export function buildDomainDescriptor(
   const terminalNodes: GraphNodeRef[] = [];
   const attachments: GraphAttachment[] = [];
 
-  for (const [stateId, whenDef] of Object.entries(whens)) {
-    const ref: GraphNodeRef = { kind: 'domain-state', domainId, nodeId: stateId };
+  for (const [phaseId, whenDef] of Object.entries(whens)) {
+    const ref: GraphNodeRef = { kind: 'domain-phase', domainId, nodeId: phaseId };
     nodes.push({
       ref,
-      id: stateId,
+      id: phaseId,
       terminal: whenDef.terminal ?? false,
-      entry: stateId === initial,
+      entry: phaseId === initial,
       metadata: whenDef.metadata,
     });
-    if (stateId === initial) entryNodes.push(ref);
+    if (phaseId === initial) entryNodes.push(ref);
     if (whenDef.terminal) terminalNodes.push(ref);
 
     if (whenDef.pipeline) {
       attachments.push({
-        kind: 'state-entry-pipeline',
+        kind: 'phase-entry-pipeline',
         owner: ref,
         pipeline: { kind: 'pipeline', pipelineId: whenDef.pipeline.id },
       });
     }
 
     for (const [event, onDef] of Object.entries((whenDef.on ?? {}) as Record<string, OnDef<any>>)) {
-      const edgeId = `${stateId}:${event}`;
-      const flowRef: GraphNodeRef = { kind: 'domain-flow', domainId, edgeId };
+      const edgeId = `${phaseId}:${event}`;
+      const flowRef: GraphNodeRef = { kind: 'domain-event', domainId, edgeId };
       edges.push({
         id: edgeId,
         from: ref,
-        to: { kind: 'domain-state', domainId, nodeId: onDef.target },
-        kind: 'domain-flow',
+        to: { kind: 'domain-phase', domainId, nodeId: onDef.target },
+        kind: 'domain-event',
         event,
         label: (onDef.metadata as Record<string, string> | undefined)?.label,
         guard: onDef.guard ? 'guard' : undefined,

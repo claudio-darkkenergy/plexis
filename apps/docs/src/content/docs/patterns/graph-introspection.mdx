@@ -3,7 +3,7 @@ title: Graph Introspection
 description: Read domain.graph and pipeline.graph to get a static GraphDescriptor and run path queries — without rendering a diagram.
 ---
 
-`domain.graph` and `pipeline.graph` expose the static structure of your state machine as a `GraphDescriptor` object. Use it to inspect nodes and edges, run path queries, or feed a visualizer. This page covers reading the graph; rendering it as Mermaid or DOT is in [State Graph Visualizer](/guides/advanced/state-graph-visualizer).
+`domain.graph` and `pipeline.graph` expose the static structure of your domain or pipeline as a `GraphDescriptor` object. Use it to inspect nodes and edges, run path queries, or feed a visualizer. This page covers reading the graph; rendering it as Mermaid or DOT is in [State Graph Visualizer](/guides/advanced/state-graph-visualizer).
 
 ## Reading the graph descriptor
 
@@ -27,8 +27,8 @@ const descriptor = order.graph.describe();
 //   kind: 'domain',
 //   nodes: [...],
 //   edges: [...],
-//   entryNodes: [{ kind: 'domain-state', nodeId: 'pending', ... }],
-//   terminalNodes: [{ kind: 'domain-state', nodeId: 'fulfilled', ... }],
+//   entryNodes: [{ kind: 'domain-phase', nodeId: 'pending', ... }],
+//   terminalNodes: [{ kind: 'domain-phase', nodeId: 'fulfilled', ... }],
 //   attachments: []
 // }
 
@@ -41,21 +41,21 @@ console.log(descriptor.edges.map((e) => `${e.from.nodeId} --${e.event}--> ${e.to
 
 ## Inspecting individual nodes
 
-`domain.graph.node(id)` returns the `GraphNode` for a named state or pipeline node.
+`domain.graph.node(id)` returns the `GraphNode` for a named phase or pipeline node.
 
 ```typescript
 const node = order.graph.node('processing');
-// { ref: { kind: 'domain-state', nodeId: 'processing' }, id: 'processing', terminal: false }
+// { ref: { kind: 'domain-phase', nodeId: 'processing' }, id: 'processing', terminal: false }
 ```
 
 `domain.graph.inbound(id)` and `domain.graph.outbound(id)` return the edges that arrive at or depart from a node:
 
 ```typescript
 const inbound = order.graph.inbound('processing');
-// edges where to.nodeId === 'processing' → [the SUBMIT edge]
+// edges where to.nodeId === 'processing' → [the 'submit' event edge]
 
 const outbound = order.graph.outbound('processing');
-// edges where from.nodeId === 'processing' → [the FULFILL edge]
+// edges where from.nodeId === 'processing' → [the 'fulfill' event edge]
 ```
 
 ## Path queries
