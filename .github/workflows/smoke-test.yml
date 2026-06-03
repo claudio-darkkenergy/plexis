@@ -5,18 +5,19 @@ on:
     workflows: ["Build, Test, and Publish"]
     types: [completed]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
+      - uses: actions/setup-node@v6
 
       - name: Smoke-test published package
         run: |
